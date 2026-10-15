@@ -75,10 +75,3 @@ It places:
 
 The converter refuses a game that already has PinNode calls, and a folder with no `.ino`
 containing `setup()` and `loop()`.
-
-## For the web converter
-
-`convert()` returns `hooks` and `report_info` (JSON). After its AI step the web rebuilds CONVERSION.md with
-`render_report(report_info, hooks, ai)`, where `ai` is `{"placed": [{hook, file, line, why}],
-"achievements": [{id, name, desc, points, where, wired}], "skipped": [{hook, why}]}` and `hook` is a
-hook's `key` (or name). The AI's hooks leave the to-do list; unwired achievements join it.

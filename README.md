@@ -16,10 +16,10 @@ a game, write its `PinNodeGame.h` and check its manifest.
 Install it once, then `#include <PinNode.h>` in the game. Don't copy its files into a sketch:
 every game builds against the one library, so a fix reaches all of them.
 
-- **Arduino IDE:** on **[github.com/pin-node/PinNode](https://github.com/pin-node/PinNode)**, click
-  **Code → Download ZIP**, then **Sketch → Include Library → Add .ZIP Library…** and pick that ZIP.
-- **arduino-cli:** `arduino-cli lib install --git-url https://github.com/pin-node/PinNode.git` (needs
-  `library.enable_unsafe_install`).
+- **Arduino IDE:** **Tools → Manage Libraries…**, search **PinNode**, and click **Install**. Updates
+  show up there too. (Or, on [github.com/pin-node/PinNode](https://github.com/pin-node/PinNode),
+  **Code → Download ZIP**, then **Sketch → Include Library → Add .ZIP Library…**.)
+- **arduino-cli:** `arduino-cli lib install PinNode`.
 
 ```cpp
 #include <PinNode.h>
@@ -85,7 +85,7 @@ earlier release**, so an achievement number can't be reused. That's the same
 rule the PinNode import enforces, caught before you publish. Problems show as
 annotations on the PR.
 
-Pin the action to a release tag (`pin-node/PinNode@v0.3.11`), not `main`.
+Pin the action to a release tag (`pin-node/PinNode@v0.3.12`), not `main`.
 
 ## Scan settings from a game repo
 
@@ -105,6 +105,14 @@ the RPU example game it reproduces every code-derivable field of the
 hand-written `rpu-standard` template (see `tests/test_scan.py`). Older BSOS-style
 games don't use this menu pattern; the report says so, and their settings are
 written by hand.
+
+## Credits
+
+PinNode is built on **RetroPinUpgrade (RPU)**, Dick Hamill's Arduino-based replacement for the
+original CPU code in classic Bally, Stern and Williams pinball machines: the RPU boards, the RPU OS
+and the games written on it ([github.com/RetroPinUpgrade](https://github.com/RetroPinUpgrade)). Thanks
+to Dick for RPU and for his support of PinNode. The converter's tests also use Dave's Think Tank's
+[Star Trek 2025](https://github.com/DavesThinkTank/Bally-Star-Trek).
 
 ## Licence
 

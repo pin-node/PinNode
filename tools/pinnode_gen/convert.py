@@ -38,7 +38,7 @@ class Hook:
 
     @property
     def key(self) -> str:
-        """A stable id for the web converter's AI step: the name in snake case ("game_start",
+        """A stable id: the name in snake case ("game_start",
         "operator_menu_self_test_guard_and_idle_exit"). Names don't change between versions."""
         return re.sub(r"[^a-z0-9]+", "_", self.name.lower()).strip("_")
 
@@ -50,7 +50,7 @@ class ConvertResult:
     manifest: dict
     machine_def: dict
     hooks: list[Hook] = field(default_factory=list)
-    report_info: dict = field(default_factory=dict)   # JSON: render_report(report_info, hooks, ai) rebuilds report_md
+    report_info: dict = field(default_factory=dict)   # JSON: render_report(report_info, hooks) rebuilds report_md
 
     @property
     def unplaced(self) -> list[Hook]:
@@ -1062,67 +1062,37 @@ def _hook(h) -> Hook:
     return Hook(h["name"], bool(h.get("placed")), h.get("where", ""), h.get("note", ""))
 
 
-from .generate import _const  # noqa: E402  (ACH_ names, as PinNodeGame.h writes them)
 
 
-def render_report(info: dict, hooks: list, ai: Optional[dict] = None) -> str:
+def render_report(info: dict, hooks: list) -> str:
     """CONVERSION.md from the converter's hooks (Hook objects or {name, key, placed, where, note} dicts)
-    and, after the web's AI step, what it did:
-        ai = {"placed": [{hook, file, line, why}],                 hook = the Hook's key or name
-              "achievements": [{id, name, desc, points, where, wired}],
-              "skipped": [{hook, why}]}
-    The AI's hooks move from the to-do list to "What was added", marked as the AI's, to check."""
+    and report_info, so a stored conversion can be re-rendered."""
     hooks = [_hook(h) for h in hooks]
-    ai = ai or {}
-    by_ai = {}
-    for a in ai.get("placed") or []:
-        by_ai[a.get("hook", "")] = a
-    skipped = {a.get("hook", ""): a.get("why", "") for a in ai.get("skipped") or []}
-    placed, ai_placed, todo = [], [], []
-    for h in hooks:
-        a = by_ai.get(h.key) or by_ai.get(h.name)
-        if not h.placed and a:
-            ai_placed.append((h, a))
-        elif h.placed:
-            placed.append(h)
-        else:
-            why = skipped.get(h.key) or skipped.get(h.name)
-            todo.append(h if not why else Hook(h.name, False, "", f"{h.note} (the AI couldn't: {why})"))
-    achs = ai.get("achievements") or []
-    unwired = [a for a in achs if not a.get("wired")]
+    placed = [h for h in hooks if h.placed]
+    todo = [h for h in hooks if not h.placed]
     from . import __version__
     game = info["game"]
     rs = info["ruleset"]
-    n_placed = len(placed) + len(ai_placed)
+    n_placed = len(placed)
     out = [f"# PinNode conversion: {game}", "",
            f"Converted by the PinNode converter {__version__}, for PinNode library {__version__} or later.", "",
-           f"**{n_placed} PinNode hooks in place**" + (f" ({len(ai_placed)} by AI: check them)." if ai_placed else ".")
+           f"**{n_placed} PinNode hooks in place**."
            + (f" **{len(todo)} for you to do** (below)." if todo else " Nothing left for you to place by hand."),
-           f"Every line PinNode added is marked `{MARK}`" + (" (`// PinNode (AI)` for the AI's)." if ai_placed or achs else "."), ""]
+           f"Every line PinNode added is marked `{MARK}`.", ""]
     out += ["## What you need to do", ""]
     steps = [f"{h.name[0].upper() + h.name[1:]}: {h.note}" for h in todo]
     if not info["header"]:
         steps.append("The header PinNodeGame.h wasn't generated: fix the manifest, then open it in the "
                      "**Achievements builder** (pin-node.com/builder) and download PinNodeGame.h into your sketch folder")
-    for a in unwired:
-        const = _const("ACH_", str(a.get("id", "")))         # the name PinNodeGame.h gives it
-        where = (a.get("where") or "where it happens").rstrip(". ")
-        steps.append(f"Achievement **{a.get('name', a.get('id'))}**: call "
-                     f"`PinNodeCtrl_Achievement(player, {const});` {where[0].lower() + where[1:]}. "
-                     "If your game can't do it, remove it in the Achievements builder")
-    if ai_placed or achs:
-        steps.append("Check every line marked `// PinNode (AI)`: the AI's edits are suggestions")
-    if not achs:
-        steps.append("Add your achievements and stats (they're your rules): open `pinnode.game.json` in the "
-                     "**Achievements builder** (pin-node.com/builder), download the new `pinnode.game.json` and "
-                     "`PinNodeGame.h` into your sketch folder, and call `PinNodeCtrl_Achievement(player, ACH_…)` where "
-                     "each one happens (the guide's Achievements section). Optional, recommended")
+    steps.append("Add your achievements and stats (they're your rules): open `pinnode.game.json` in the "
+                 "**Achievements builder** (pin-node.com/builder), download the new `pinnode.game.json` and "
+                 "`PinNodeGame.h` into your sketch folder, and call `PinNodeCtrl_Achievement(player, ACH_…)` where "
+                 "each one happens (the guide's Achievements section). Optional, recommended")
     out += [f"{i}. {t}." if not t.endswith(".") else f"{i}. {t}" for i, t in enumerate(steps, 1)]
     out += ["", "## Build and test", "",
             "1. **Install the PinNode library** (once): it's your game's link to the PinNode network card "
-            "(the ESP32). On **[github.com/pin-node/PinNode](https://github.com/pin-node/PinNode)**, click "
-            "**Code → Download ZIP**, then in the Arduino IDE **Sketch → Include Library → Add .ZIP Library…** "
-            "and pick that ZIP.",
+            "(the ESP32). In the Arduino IDE: **Tools → Manage Libraries…**, search **PinNode**, and click "
+            "**Install**.",
             "2. **Choose the board:** **Tools → Board → Arduino AVR Boards → Arduino Mega or Mega 2560**, processor "
             "**ATmega2560**. No AVR boards in the list? Install \"Arduino AVR Boards\" in **Tools → Board → Boards Manager**.",
             f"3. **Open** `{game}/{game}.ino` (unzip this ZIP first) and press **Verify**.",
@@ -1162,15 +1132,7 @@ def render_report(info: dict, hooks: list, ai: Optional[dict] = None) -> str:
              "from your code's comments. Check them against the manual."), "",
             "## What was added", ""]
     out += [f"- **{h.name}**: {h.where}" + (f". {h.note}" if h.note else "") for h in placed if h.where != "not needed"]
-    out += [f"- **{h.name}**: {a.get('file', '')}:{a.get('line', '')} (by AI: check it)"
-            + (f". {a['why']}" if a.get("why") else "") for h, a in ai_placed]
     out += [""]
-    if achs:
-        out += ["## Achievements (suggested by AI)", ""]
-        out += [f"- **{a.get('name', a.get('id'))}** (`{a.get('id')}`, {a.get('points', '?')} points): {a.get('desc', '')}"
-                + (f" Wired in: {(a.get('where') or '').rstrip('. ')}." if a.get("wired") else " Not wired in yet (see What you need to do).")
-                for a in achs]
-        out += [""]
     not_needed = [h for h in placed if h.where == "not needed"]
     if not_needed:
         out += ["## Not needed for this game", ""] + [f"- **{h.name}**: {h.note}" for h in not_needed] + [""]

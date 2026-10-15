@@ -1,5 +1,12 @@
 # Changes
 
+## 0.3.12
+
+- Install from the Arduino IDE's Library Manager: search **PinNode**. Updates show up there too.
+- The converter names Williams Scorpion (1980) lamps, switches and coils from the manual, from
+  [RPUMachines](https://github.com/pin-node/RPUMachines), the machine definitions library.
+- Credits for RetroPinUpgrade (Dick Hamill) in the README.
+
 ## 0.3.11 — first public release
 
 The PinNode library and converter for RetroPinUpgrade games.

@@ -19,15 +19,15 @@ Each step says whether you need it, and why. Every call is listed in [API.md](AP
 The PinNode library is your game's link to the PinNode network card (the ESP32). Install it once;
 don't copy its files into your sketch.
 
-- **Arduino IDE:** on **[github.com/pin-node/PinNode](https://github.com/pin-node/PinNode)**, click
-  **Code → Download ZIP**, then **Sketch → Include Library → Add .ZIP Library…** and pick that ZIP.
+- **Arduino IDE:** **Tools → Manage Libraries…**, search **PinNode**, and click **Install**. Updates
+  show up there too. (Or, on [github.com/pin-node/PinNode](https://github.com/pin-node/PinNode),
+  **Code → Download ZIP**, then **Sketch → Include Library → Add .ZIP Library…**.)
 - **Board:** **Tools → Board → Arduino AVR Boards → Arduino Mega or Mega 2560**, processor
   **ATmega2560**.
-- **arduino-cli:** `arduino-cli lib install --git-url https://github.com/pin-node/PinNode.git` (needs
-  `library.enable_unsafe_install`).
+- **arduino-cli:** `arduino-cli lib install PinNode`.
   Then build with `arduino-cli compile --fqbn arduino:avr:mega …`.
 
-To update it later, download the new version and add it the same way: it replaces the old one.
+To update it later, Library Manager shows an **Update** button when a new version is out.
 
 **Why:** every game builds against the one library, so a fix reaches all of them, and your sketch
 stays your own code.

@@ -259,26 +259,12 @@ def test_adjust_done_as_an_expression(tmp_path):
     assert "MACHINE_STATE_ADJUST_DONE ((MACHINE_STATE_TEST_DONE-20) - PINNODE_NUM_ADJUSTMENTS)" in ino
 
 
-def test_render_report_after_the_ai_step():
-    # the web stores hooks and report_info as JSON, runs the AI, then re-renders CONVERSION.md
+def test_render_report_rebuilds_the_report():
+    # a stored conversion (hooks and report_info as JSON) renders the same CONVERSION.md
     r = convert(FIX / "example-machine", machine="Example Machine")
     info = json.loads(json.dumps(r.report_info))
     hooks = [{"name": h.name, "key": h.key, "placed": h.placed, "where": h.where, "note": h.note} for h in r.hooks]
     assert render_report(info, hooks) == r.report_md
-    todo = [h for h in r.hooks if not h.placed]
-    assert todo, "the fixture should leave something for the AI"
-    ai = {"placed": [{"hook": todo[0].key, "file": "ExampleMachineMEGA.ino", "line": 123, "why": "where the menu closes"}],
-          "achievements": [{"id": "ACH_SKILL", "name": "Skill Shot", "desc": "Make the skill shot", "points": 5,
-                            "where": "in the skill-shot switch case", "wired": False},
-                           {"id": "ACH_EB", "name": "Extra Ball", "desc": "Collect it", "points": 10,
-                            "where": "ExampleMachineMEGA.ino:900", "wired": True}]}
-    md = render_report(info, hooks, ai)
-    assert f"**{todo[0].name}**: ExampleMachineMEGA.ino:123 (by AI: check it)" in md
-    todo_section = md.split("## What you need to do")[1].split("## Build and test")[0]
-    assert todo[0].name[0].upper() + todo[0].name[1:] not in todo_section
-    assert "PinNodeCtrl_Achievement(player, ACH_ACH_SKILL);" in todo_section and "ACH_EB" not in todo_section
-    assert "## Achievements (suggested by AI)" in md and "Add your achievements and stats" not in md
-
 
 def test_phone_tests_on_the_example_machine():
     # owner, 2026-10-13: "this game doesn't offer tests" after converting: the library's tests, one line each
@@ -295,10 +281,3 @@ def test_phone_tests_on_the_example_machine():
     assert ids[:7] == ["lamp-test", "display-test", "solenoid-test", "switch-test", "clear-audits",
                        "enter-diagnostics", "exit-diagnostics"]                        # PinNode.h's order
     assert [a["index"] for a in r.manifest["actions"]] == list(range(len(ids)))
-def test_render_report_names_the_header_constant():
-    # the owner's Star Trek: "PinNodeCtrl_Achievement(player, skill-shot)" doesn't compile
-    r = convert(FIX / "example-machine", machine="Example Machine")
-    md = render_report(r.report_info, r.hooks, {"achievements": [
-        {"id": "skill-shot", "name": "Engage!", "points": 5, "where": "In the switch handler, on the lit lane..", "wired": False}]})
-    assert "`PinNodeCtrl_Achievement(player, ACH_SKILL_SHOT);` in the switch handler, on the lit lane." in md
-    assert ".." not in md.split("## What you need to do")[1].split("## Build and test")[0]
