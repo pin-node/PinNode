@@ -442,50 +442,8 @@ static byte bootTarget;
 boolean PinNodeCtrl_OriginalChosen() { return EEPROM.read(PINNODE_EEPROM_BOOT_TARGET) == 'O'; }
 void PinNodeCtrl_SetBootTarget(byte original) { EEPROM.update(PINNODE_EEPROM_BOOT_TARGET, original ? 'O' : 0xFF); }
 
-// ------------------------------------------------------------------ node status (for a status display)
-
-static byte nodeWifi, nodeCloud;
-static unsigned long nodeStatusMs;
-static boolean nodeStatusSeen;
-static char checkins[5][4];                 // [0] = waiting for the next game, [1-4] = slots; "" = none
-static char nodeMsg[29];
-static unsigned long nodeMsgUntil;
-
-boolean PinNodeCtrl_NodeStatus(byte *wifi, byte *cloud) {
-  if (!nodeStatusSeen || millis() - nodeStatusMs > 30000UL) return false;
-  *wifi = nodeWifi; *cloud = nodeCloud;
-  return true;
-}
-boolean PinNodeCtrl_CheckedIn(byte slot, char *initials) {
-  if (slot > 4 || !checkins[slot][0]) return false;
-  memcpy(initials, checkins[slot], 4);
-  return true;
-}
-const char *PinNodeCtrl_NodeMessage() {
-  if (!nodeMsg[0] || (long)(millis() - nodeMsgUntil) > 0) return NULL;
-  return nodeMsg;
-}
-
-static void NodeInfoRecord(byte type, const byte *data, byte len) {
-  if (type == 0xA0 && len >= 2) {             // NODE_STATUS: wifi u8, cloud u8, queued u16, ...
-    nodeWifi = data[0]; nodeCloud = data[1]; nodeStatusMs = millis(); nodeStatusSeen = true;
-  } else if (type == 0xA4 && len >= 5) {      // CHECKIN: slot u8, initials[3], flags u8 (1 bound, 2 waiting)
-    byte slot = data[4] == 0x02 ? 0 : data[0];
-    if (slot > 4) return;
-    for (byte i = 0; i < 3; i++) checkins[slot][i] = (data[1 + i] >= 0x20 && data[1 + i] < 0x7F) ? (char)data[1 + i] : ' ';
-    checkins[slot][3] = 0;
-    if (slot) checkins[0][0] = 0;             // the waiting one was bound to this game
-  } else if (type == 0xA6 && len >= 1) {      // DISPLAY_MSG: secs u8, text
-    byte n = len - 1 < 28 ? len - 1 : 28;
-    memcpy(nodeMsg, data + 1, n);
-    nodeMsg[n] = 0;
-    nodeMsgUntil = millis() + 1000UL * (data[0] ? data[0] : 10);
-  }
-}
-
 static void HandleRecord(byte type, const byte *data, byte len) {
   if (recordHook && recordHook(type, data, len)) return;
-  NodeInfoRecord(type, data, len);
   if (type == 0xA1 && len >= 7) {
     SettingSet(data, len);
   } else if (type == 0xA7 && len >= 1) {      // SETTINGS_LOCK: on u8, profileHash u32 (for the node's records)
@@ -532,7 +490,6 @@ static boolean ballOpen = false;           // a ball started and not yet ended
 static byte openSlot, openBall;
 static unsigned long gameStartMs, ballStartMs;
 static byte lastMode = 0xFF, lastBall = 0xFF, lastSlot = 0xFF;
-byte PinNodeCtrl_LastMode(byte *ball, byte *slot) { *ball = lastBall; *slot = lastSlot; return lastMode; }
 static byte lastCredits = 0xFF, lastFreePlay = 0xFF;
 
 static void put16(byte *p, uint16_t v) { p[0] = (byte)v; p[1] = (byte)(v >> 8); }
@@ -638,7 +595,6 @@ void PinNodeCtrl_GameStart(byte credits, boolean freePlay) {
   EEPROM.update(PINNODE_EEPROM_GAME_COUNTER + 1, (byte)(gameCounter >> 8));
   gameOpen = true;
   ballOpen = false;
-  for (byte i = 1; i <= 4; i++) checkins[i][0] = 0;   // a new game: earlier check-ins are done
   for (byte i = 0; i < PINNODE_STAT_SLOTS; i++) pendStat[i].used = 0;
   for (byte i = 0; i < 4; i++) claimCode[i] = 0;   // a new game ends the last one's claim window
   gameStartMs = millis();

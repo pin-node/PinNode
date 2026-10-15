@@ -1,5 +1,11 @@
 # Changes
 
+## 0.3.15
+
+- The OLED status screen from 0.3.13 is removed. `PINNODE_OLED` and the U8g2 library are no longer
+  used, and the converter no longer adds the display calls. Games that called `PinNode_OledBegin` or
+  `PinNode_OledUpdate` should remove those two lines.
+
 ## 0.3.14
 
 - Issues are open on this repo, with a form for library and converter problems. For account,
