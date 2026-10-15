@@ -1,0 +1,253 @@
+{
+  "$schema": "https://raw.githubusercontent.com/pin-node/PinNode/main/tools/pinnode_gen/pinnode-game.schema.json",
+  "manifestVersion": 1,
+  "ruleset": {
+    "id": "strange-science-rpu",
+    "title": "bally-strange-science",
+    "name": "Strange Science (RPU)",
+    "repo": "wifijt/strange-science-rpu",
+    "version": "0.1.0",
+    "scoringVersion": 1,
+    "platform": "bally-6803"
+  },
+  "players": {
+    "max": 4
+  },
+  "scoreSanity": {
+    "maxPerGame": 20000000,
+    "maxPerBall": 8000000,
+    "minGameMs": 30000,
+    "scoreQuantum": 10
+  },
+  "achievements": [
+    {
+      "id": "first-light",
+      "index": 0,
+      "name": "First Light",
+      "desc": "Finish your first game on Strange Science",
+      "points": 5,
+      "kind": "event"
+    },
+    {
+      "id": "full-voltage",
+      "index": 1,
+      "name": "Full Voltage",
+      "desc": "Charge the Volts meter to 900V in one ball",
+      "points": 25,
+      "kind": "event"
+    },
+    {
+      "id": "anti-gravity",
+      "index": 2,
+      "name": "Defy Gravity",
+      "desc": "Collect Anti Gravity",
+      "points": 10,
+      "kind": "event"
+    },
+    {
+      "id": "lab-complete",
+      "index": 3,
+      "name": "Lab Complete",
+      "desc": "Spell L-A-B three times in one game",
+      "points": 25,
+      "kind": "event"
+    },
+    {
+      "id": "big-brain",
+      "index": 4,
+      "name": "Big Brain",
+      "desc": "Light both Brain targets on the same ball",
+      "points": 10,
+      "kind": "event"
+    },
+    {
+      "id": "bonus-x6",
+      "index": 5,
+      "name": "Six Times Over",
+      "desc": "Reach 6X bonus multiplier",
+      "points": 25,
+      "kind": "event"
+    },
+    {
+      "id": "power-saver-save",
+      "index": 6,
+      "name": "Power Saver",
+      "desc": "Save a ball with the Power Saver kicker",
+      "points": 5,
+      "kind": "event"
+    },
+    {
+      "id": "thumper-thousand",
+      "index": 7,
+      "name": "Thumper Thousand",
+      "desc": "Hit the thumper bumpers 1,000 times across all games",
+      "points": 50,
+      "kind": "stat",
+      "stat": "bumper-hits",
+      "target": 1000,
+      "scope": "lifetime"
+    },
+    {
+      "id": "mad-scientist",
+      "index": 8,
+      "name": "Mad Scientist",
+      "desc": "Score 5,000,000 in a single game",
+      "points": 100,
+      "kind": "event",
+      "hidden": true
+    }
+  ],
+  "stats": [
+    {
+      "id": "bumper-hits",
+      "index": 0,
+      "name": "Thumper bumper hits",
+      "kind": "counter"
+    },
+    {
+      "id": "lab-spelled",
+      "index": 1,
+      "name": "L-A-B completions",
+      "kind": "counter"
+    },
+    {
+      "id": "best-bonus",
+      "index": 2,
+      "name": "Best bonus collected",
+      "kind": "max"
+    },
+    {
+      "id": "max-volts",
+      "index": 3,
+      "name": "Highest voltage",
+      "kind": "max",
+      "unit": "V"
+    }
+  ],
+  "settings": [
+    {
+      "id": "volume",
+      "index": 0,
+      "name": "Volume",
+      "group": "sound",
+      "type": "int",
+      "min": 0,
+      "max": 30,
+      "default": 20,
+      "liveSafe": true,
+      "operatorOnly": false
+    },
+    {
+      "id": "music",
+      "index": 1,
+      "name": "Background music",
+      "group": "sound",
+      "type": "bool",
+      "default": 1,
+      "liveSafe": true,
+      "operatorOnly": false
+    },
+    {
+      "id": "balls-per-game",
+      "index": 2,
+      "name": "Balls per game",
+      "group": "game",
+      "type": "enum",
+      "values": [
+        {
+          "v": 3,
+          "label": "3"
+        },
+        {
+          "v": 5,
+          "label": "5"
+        }
+      ],
+      "default": 3,
+      "difficulty": true
+    },
+    {
+      "id": "free-play",
+      "index": 3,
+      "name": "Free play",
+      "group": "pricing",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "id": "tilt-warnings",
+      "index": 4,
+      "name": "Tilt warnings",
+      "group": "game",
+      "type": "int",
+      "min": 0,
+      "max": 3,
+      "default": 2,
+      "difficulty": true
+    },
+    {
+      "id": "extra-ball-award",
+      "index": 5,
+      "name": "Extra ball award",
+      "group": "game",
+      "type": "enum",
+      "values": [
+        {
+          "v": 0,
+          "label": "Extra ball"
+        },
+        {
+          "v": 1,
+          "label": "Points"
+        }
+      ],
+      "default": 0,
+      "difficulty": true
+    },
+    {
+      "id": "attract-sound",
+      "index": 6,
+      "name": "Attract mode sound",
+      "group": "sound",
+      "type": "bool",
+      "default": 0
+    }
+  ],
+  "audits": [
+    {
+      "id": "total-plays",
+      "index": 0,
+      "name": "Total plays"
+    },
+    {
+      "id": "total-replays",
+      "index": 1,
+      "name": "Total replays"
+    },
+    {
+      "id": "high-score-beaten",
+      "index": 2,
+      "name": "High score beaten"
+    },
+    {
+      "id": "chute-1-coins",
+      "index": 3,
+      "name": "Chute 1 coins"
+    },
+    {
+      "id": "chute-2-coins",
+      "index": 4,
+      "name": "Chute 2 coins"
+    },
+    {
+      "id": "chute-3-coins",
+      "index": 5,
+      "name": "Chute 3 coins"
+    },
+    {
+      "id": "total-tilts",
+      "index": 6,
+      "name": "Total tilts"
+    }
+  ]
+}

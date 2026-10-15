@@ -1,0 +1,640 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/pin-node/PinNode/main/tools/pinnode_gen/pinnode-game.schema.json",
+  "title": "PinNode game manifest",
+  "type": "object",
+  "required": [
+    "manifestVersion",
+    "ruleset"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "manifestVersion": {
+      "const": 1
+    },
+    "ruleset": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "name",
+        "version",
+        "scoringVersion"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+        },
+        "scoringVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "platform": {
+          "enum": [
+            "bally-35",
+            "bally-6803",
+            "stern-35",
+            "williams-sys3",
+            "williams-sys4",
+            "williams-sys6",
+            "williams-sys7",
+            "williams-sys9",
+            "williams-sys11",
+            "other"
+          ]
+        }
+      }
+    },
+    "players": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 4
+        }
+      }
+    },
+    "scoreSanity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxPerGame": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxPerBall": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minGameMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scoreQuantum": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "achievements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/achievement"
+      }
+    },
+    "stats": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stat"
+      }
+    },
+    "settings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/setting"
+      }
+    },
+    "audits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "index",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "index": {
+            "$ref": "#/$defs/index"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "retired": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "switches": {
+      "$ref": "#/$defs/namedList"
+    },
+    "solenoids": {
+      "$ref": "#/$defs/namedList"
+    },
+    "lamps": {
+      "$ref": "#/$defs/namedList"
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "minimum": 128,
+            "maximum": 255
+          },
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "index",
+          "name",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "index": {
+            "$ref": "#/$defs/index"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "kind": {
+            "enum": [
+              "test",
+              "oneshot"
+            ]
+          },
+          "arg": {
+            "type": "object",
+            "required": [
+              "min",
+              "max"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 40
+              }
+            }
+          },
+          "confirm": {
+            "type": "boolean"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "retired": {
+            "type": "boolean"
+          },
+          "valueLabel": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "lock": {
+            "type": "boolean"
+          },
+          "diagnostics": {
+            "enum": [
+              "enter",
+              "exit"
+            ]
+          },
+          "valueList": {
+            "enum": [
+              "lamps",
+              "switches",
+              "solenoids",
+              "sounds"
+            ]
+          }
+        }
+      }
+    },
+    "sounds": {
+      "$ref": "#/$defs/namedList"
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,47}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 254
+    },
+    "namedList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "n",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "n": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40
+          }
+        }
+      }
+    },
+    "achievement": {
+      "type": "object",
+      "required": [
+        "id",
+        "index",
+        "name",
+        "desc",
+        "points",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "index": {
+          "$ref": "#/$defs/index"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "desc": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "points": {
+          "enum": [
+            5,
+            10,
+            25,
+            50,
+            100
+          ]
+        },
+        "kind": {
+          "enum": [
+            "event",
+            "stat"
+          ]
+        },
+        "stat": {
+          "$ref": "#/$defs/id"
+        },
+        "target": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scope": {
+          "enum": [
+            "game",
+            "lifetime"
+          ]
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        },
+        "icon": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+\\.png$"
+        },
+        "retired": {
+          "type": "boolean"
+        }
+      },
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "stat"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "stat",
+          "target",
+          "scope"
+        ]
+      }
+    },
+    "stat": {
+      "type": "object",
+      "required": [
+        "id",
+        "index",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "index": {
+          "$ref": "#/$defs/index"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "kind": {
+          "enum": [
+            "counter",
+            "max"
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "retired": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "required": [
+        "id",
+        "index",
+        "name",
+        "type",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "index": {
+          "$ref": "#/$defs/index"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "group": {
+          "enum": [
+            "sound",
+            "game",
+            "pricing",
+            "features",
+            "awards",
+            "display",
+            "service"
+          ]
+        },
+        "type": {
+          "enum": [
+            "int",
+            "bool",
+            "enum",
+            "score",
+            "flags"
+          ]
+        },
+        "min": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 4294967295
+        },
+        "max": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 4294967295
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "values": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": [
+              "v",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "v": {
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 4294967295
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 40
+              }
+            }
+          }
+        },
+        "default": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 4294967295
+        },
+        "difficulty": {
+          "type": "boolean",
+          "default": false
+        },
+        "operatorOnly": {
+          "type": "boolean",
+          "default": true
+        },
+        "liveSafe": {
+          "type": "boolean",
+          "default": false
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "retired": {
+          "type": "boolean"
+        },
+        "bits": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "required": [
+              "bit",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "bit": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 31
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 40
+              }
+            }
+          }
+        },
+        "requiresPresence": {
+          "type": "boolean",
+          "default": false
+        },
+        "tournamentMode": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 4294967295,
+          "description": "This setting is the game's tournament switch: at this value the game is in tournament mode (e.g. RPU's Tournament scoring, 1 = on). At most one setting has it."
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "menuId": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "eeprom": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4095
+            },
+            "variable": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "file": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "min",
+              "max"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "score"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "min",
+              "max"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "values"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "flags"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "bits"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

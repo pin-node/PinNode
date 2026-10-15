@@ -1,0 +1,18 @@
+# Copy to .github/workflows/pinnode-check.yml in your RPU game repo.
+name: PinNode
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pin-node/PinNode@v0.3.11   # or the newest release
+        with:
+          manifest: pinnode.game.json
+          header: PinNodeGame.h

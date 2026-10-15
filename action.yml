@@ -1,0 +1,48 @@
+name: PinNode manifest check
+description: >
+  Validate pinnode.game.json, confirm PinNodeGame.h is up to date, and check
+  that no achievement/stat/setting/audit number was reused against every
+  earlier GitHub release of this repo (SPEC-game-manifest §9).
+branding:
+  icon: check-circle
+  color: orange
+inputs:
+  manifest:
+    description: Path to the manifest
+    default: pinnode.game.json
+  header:
+    description: Path to the generated header ("" to skip the freshness check)
+    default: PinNodeGame.h
+  check-previous-releases:
+    description: Compare against the manifests attached to earlier releases
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: "3.12"
+    - name: Install pinnode-gen
+      shell: bash
+      run: python -m pip install --quiet "$GITHUB_ACTION_PATH"
+    - name: Fetch earlier releases' manifests
+      if: inputs.check-previous-releases == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/pinnode-previous"
+        for tag in $(gh release list -R "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName'); do
+          if gh release download "$tag" -R "$GITHUB_REPOSITORY" --pattern pinnode.game.json \
+               --dir "$RUNNER_TEMP/pinnode-previous/$tag" 2>/dev/null; then
+            echo "previous: $tag"
+          fi
+        done
+    - name: pinnode-gen check
+      shell: bash
+      run: |
+        args=("${{ inputs.manifest }}" --github)
+        if [ -n "${{ inputs.header }}" ]; then args+=(--header "${{ inputs.header }}"); fi
+        mapfile -t prev < <(find "$RUNNER_TEMP/pinnode-previous" -name pinnode.game.json 2>/dev/null)
+        if [ ${#prev[@]} -gt 0 ]; then args+=(--previous "${prev[@]}"); fi
+        pinnode-gen check "${args[@]}"

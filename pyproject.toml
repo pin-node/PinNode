@@ -1,0 +1,34 @@
+[project]
+license = { text = "MIT" }
+name = "pinnode-rpu-tools"
+version = "0.3.11"
+description = "pinnode-gen: manifest tools for RPU games (scan settings from the repo; codegen later)"
+requires-python = ">=3.11"
+dependencies = ["jsonschema>=4.23"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.7"]
+
+[project.scripts]
+pinnode-gen = "tools.pinnode_gen.cli:main"
+
+[tool.setuptools]
+packages = ["tools", "tools.pinnode_gen"]
+
+[tool.setuptools.package-data]
+"tools.pinnode_gen" = ["*.json", "machines/*.json"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# convert.py carries the C++ lines it inserts into games; they read better unwrapped
+"tools/pinnode_gen/convert.py" = ["E501"]
