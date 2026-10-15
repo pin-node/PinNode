@@ -8,7 +8,7 @@ from pathlib import Path
 
 from tools.pinnode_gen.convert import convert, render_report
 
-FIX = Path(__file__).resolve().parent / "fixtures"
+from tests._fixtures import FIX
 
 
 def _func(text: str, name: str) -> str:

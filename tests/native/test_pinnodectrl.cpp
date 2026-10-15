@@ -276,7 +276,7 @@ int main() {
   CHECK(count(0x35) == c0 + 3 && last(0x35)->d[1] == 1);
 
   // BOOT_SELECT (0xAC) -> BOOT_RESULT (0x36): the answers that don't restart the Mega
-  inject(0xAC, {30, 0, 1});                                       // original, on a board rev 300
+  inject(0xAC, {30, 0, 1});                                       // original, on an SPI board
   PinNodeCtrl_Update(millis(), false);
   CHECK(last(0x36) && last(0x36)->d[0] == 30 && last(0x36)->d[3] == PINNODE_BOOT_UNSUPPORTED);
   inject(0xAC, {31, 0, 0});                                       // this game: already running it

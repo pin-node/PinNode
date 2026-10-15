@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Machine definitions (lamps, switches, coils)
+    url: https://github.com/pin-node/RPUMachines
+    about: Add or fix a machine in RPUMachines.

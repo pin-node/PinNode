@@ -1,0 +1,37 @@
+name: Problem with the library or converter
+description: Something doesn't build, doesn't work, or the guide is wrong.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues here are public. For your account, a machine, setup or a license, email **support@pin-node.com** instead.
+  - type: input
+    id: version
+    attributes:
+      label: PinNode library version
+      description: Tools → Manage Libraries…, search PinNode.
+      placeholder: "0.3.13"
+    validations:
+      required: true
+  - type: dropdown
+    id: board
+    attributes:
+      label: Board
+      options:
+        - RPU Rev 4
+        - RPU Rev 102
+        - Other or not sure
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: The game's name, and a link to its code if it's public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Paste build errors as text.
+    validations:
+      required: true

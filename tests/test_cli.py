@@ -14,7 +14,7 @@ from tools.pinnode_gen.cli import main
 from tools.pinnode_gen.generate import generate
 from tools.pinnode_gen.manifest import index_conflicts, manifest_hash, validate
 
-FIX = Path(__file__).parent / "fixtures"
+from tests._fixtures import FIX
 ROOT = Path(__file__).parents[1]
 MANIFESTS = ["strange-science.pinnode.json", "rpu-standard.pinnode.json"]
 

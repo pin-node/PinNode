@@ -1,8 +1,8 @@
 /**************************************************************************
  * RPU-Link: the Mega <-> PinNode node framed link (SPEC-node-link).
  *
- * Transport : SPI (network board: mode 0, 2 MHz, 64-byte full-duplex frames,
- *             CS-framed) or UART (RPU Rev 4/102: USART2, 500 kbaud, the node
+ * Transport : SPI (future PinNode boards: mode 0, 2 MHz, 64-byte full-duplex
+ *             frames, CS-framed) or UART (RPU Rev 4/102: USART2, 1 Mbaud, the node
  *             answers each frame). The Mega sends one frame every
  *             RPULINK_PERIOD_MS from the main loop (RPULink_Update) or on
  *             demand (RPULink_Poll).
@@ -81,7 +81,7 @@ typedef void (*RPULinkRecordHandler)(byte type, const byte *data, byte len);
 // Start the link on one transport (only the one called is linked into the sketch):
 // RPU Rev 4 / 102: the ESP32 in the WiFi socket on USART2. baud must match the node's link baud.
 void RPULink_BeginUart(unsigned long baud = RPULINK_UART_BAUD);
-void RPULink_BeginSpi(byte csPin = 53);             // network board (rev 300): D53 = PB0 = MEGA_CS
+void RPULink_BeginSpi(byte csPin = 53);             // future SPI boards: D53 = PB0 = chip select
 void RPULink_SetHandler(RPULinkRecordHandler handler);
 void RPULink_Update(unsigned long now);             // call once per loop(); sends a frame every 5 ms
 void RPULink_Poll();                                // send a frame right now

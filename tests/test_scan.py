@@ -12,7 +12,7 @@ from pathlib import Path
 
 from tools.pinnode_gen.scan import main, report, scan
 
-FIX = Path(__file__).parent / "fixtures"
+from tests._fixtures import FIX
 EM = FIX / "example-machine"
 
 

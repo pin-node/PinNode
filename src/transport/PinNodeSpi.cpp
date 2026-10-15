@@ -1,6 +1,6 @@
 /**************************************************************************
- * RPU-Link over SPI (the PinNode network board, hardware rev 300: the Mega is
- * SPI master, the ESP32-S3 slave). Linked only when the game calls
+ * RPU-Link over SPI, for future PinNode boards that use it (the Mega is SPI
+ * master, the board's ESP32-S3 the slave). Linked only when the game calls
  * RPULink_BeginSpi().
  **************************************************************************/
 #if defined(ARDUINO_ARCH_AVR)

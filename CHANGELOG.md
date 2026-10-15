@@ -1,5 +1,12 @@
 # Changes
 
+## 0.3.14
+
+- Issues are open on this repo, with a form for library and converter problems. For account,
+  machine or setup help, email support@pin-node.com.
+- Comments: the SPI link is for future PinNode boards.
+- Test inputs are no longer seen as sketches by Arduino's library checks.
+
 ## 0.3.13
 
 - Status screen on the RPU board's OLED (Rev 4 and 102): the link, WiFi and cloud, setup messages,

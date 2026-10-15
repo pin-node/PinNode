@@ -234,7 +234,7 @@ class Converter:
                  if n_settings else "// PinNodeCtrl_Settings(...): no settings found to map",
                  "PinNodeCtrl_Audits(PinNodeAuditsTable, sizeof(PinNodeAuditsTable) / sizeof(PinNodeAuditsTable[0]));"
                  if n_audits else "// PinNodeCtrl_Audits(...): no audits found to map",
-                 "RPULink_BeginUart();   // RPU board: the ESP32 in the WiFi socket, on Serial2. Network board: RPULink_BeginSpi(53)",
+                 "RPULink_BeginUart();   // RPU board: the ESP32 in the WiFi socket, on Serial2. Future SPI boards: RPULink_BeginSpi(53)",
                  "{",
                  "  byte manifestHash[8];",
                  "  PinNodeManifestBytes(manifestHash);",
