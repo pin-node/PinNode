@@ -305,6 +305,20 @@ and can claim that score in the app later. Without it, those scores stay anonymo
 
 See [API.md](API.md), and `pin-node-example` for each one in a working game.
 
+## 11a. Status screen on the board's OLED (optional)
+
+RPU Rev 4 and 102 boards have a header for a 128x64 I2C OLED display. With one fitted, PinNode can
+show its status there: the link to the node, WiFi and cloud, setup messages ("NOT SET UP"), the
+game's mode, who's checked in, claim codes, and what a phone test is doing.
+
+1. Install **U8g2** from the Library Manager (Tools → Manage Libraries…, search U8g2).
+2. In your game's config header, before `#include <PinNode.h>`: `#define PINNODE_OLED`. 1.3" displays
+   are usually SH1106 (the default); for a 0.96" SSD1306 add `#define PINNODE_OLED_SSD1306`.
+3. Call `PinNode_OledBegin();` in `setup()` and `PinNode_OledUpdate(CurrentTime);` each `loop()` pass.
+   The converter places both; without `PINNODE_OLED` they do nothing.
+
+It uses about 380 bytes of RAM and 6 KB of flash, and redraws at most one line per pass.
+
 ## Set up the machine on pin-node.com (required, once per machine)
 
 **Why:** the code alone won't make anything happen. The node has to be flashed, on your WiFi, and

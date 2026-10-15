@@ -85,7 +85,7 @@ earlier release**, so an achievement number can't be reused. That's the same
 rule the PinNode import enforces, caught before you publish. Problems show as
 annotations on the PR.
 
-Pin the action to a release tag (`pin-node/PinNode@v0.3.12`), not `main`.
+Pin the action to a release tag (`pin-node/PinNode@v0.3.13`), not `main`.
 
 ## Scan settings from a game repo
 

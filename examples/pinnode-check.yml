@@ -12,7 +12,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: pin-node/PinNode@v0.3.12   # or the newest release
+      - uses: pin-node/PinNode@v0.3.13   # or the newest release
         with:
           manifest: pinnode.game.json
           header: PinNodeGame.h

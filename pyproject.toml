@@ -1,7 +1,7 @@
 [project]
 license = { text = "MIT" }
 name = "pinnode-rpu-tools"
-version = "0.3.12"
+version = "0.3.13"
 description = "pinnode-gen: manifest tools for RPU games (scan settings from the repo; codegen later)"
 requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.23"]

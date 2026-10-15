@@ -550,6 +550,28 @@ class Converter:
         self.missed(name, "call PinNodeCtrl_SettingsChanged() and PinNodeCtrl_AuditsChanged() where your "
                     "self-test / operator menu returns to attract")
 
+    def oled_status(self, main: Source) -> None:
+        """The PinNode status screen on an RPU board's OLED: PinNode_OledBegin() in setup and
+        PinNode_OledUpdate(CurrentTime) first in loop(). Both are empty unless the game defines PINNODE_OLED."""
+        name = "OLED status screen"
+        if not self.rpu_displays():
+            self.placed(name, self.files[0], 0, "not needed", "this game's OS (BSOS or WOS) has no RPU OLED header")
+            return
+        begin = re.search(r"^([ \t]*)RPULink_BeginUart\(\);   // RPU board", main.text, re.M)
+        body_start, close, _ = _function(main, "loop")
+        tick = re.search(r"^([ \t]*)CurrentTime\s*=\s*millis\(\);[^\n]*\n", main.text[body_start:close], re.M)
+        if not begin or not tick:
+            self.missed(name, "optional: call PinNode_OledBegin() in setup() and PinNode_OledUpdate(CurrentTime) "
+                        "each loop() pass (the guide's OLED section)")
+            return
+        at = body_start + tick.end()
+        main.text = (main.text[:at] + f"{tick.group(1)}PinNode_OledUpdate(CurrentTime);   "
+                     f"{MARK}: the status screen (only with #define PINNODE_OLED)\n" + main.text[at:])
+        main.insert(begin.start(), f"{begin.group(1)}PinNode_OledBegin();   {MARK}: the status screen on the "
+                                   f"board's OLED (only with #define PINNODE_OLED)\n")
+        self.placed(name, main, at, "setup and loop",
+                    "optional: fit a 128x64 OLED and #define PINNODE_OLED in the game's config to turn it on")
+
     def phone_tests(self, main: Source) -> Optional[list]:
         """Tests from the phone (the library's PinNode_Tests): the game's coil test callbacks in setup, one
         line first in loop()'s machine-state chain, and the mode reported as service meanwhile. Returns the
@@ -967,6 +989,7 @@ def convert(src_dir: Path, *, machine: Optional[str] = None, ruleset_id: Optiona
     conv.boot_original()
     conv.operator_menu_exit()
     actions = conv.phone_tests(main)
+    conv.oled_status(main)
 
     rid = ruleset_id or f"rpu-{_slug(src_dir.name)}"
     if not version:                          # the game's own GAME_MAJOR/MINOR_VERSION, when it has them

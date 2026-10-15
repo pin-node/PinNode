@@ -189,6 +189,12 @@ long PinNodeCtrl_ClearAudits();       // send them, then zero every registered a
 // alternating with the score, until the window ends or the next game starts.
 boolean PinNodeCtrl_ClaimCode(byte slot, unsigned long *code);   // slot 1-4; false if none
 
+// What the node last told the Mega, for an on-board status display (PinNode_OledUpdate in PinNode.h).
+boolean PinNodeCtrl_NodeStatus(byte *wifi, byte *cloud);   // false if no NODE_STATUS in the last 30 s
+boolean PinNodeCtrl_CheckedIn(byte slot, char *initials);  // slot 1-4 (this game) or 0 (waiting for the next); initials: 4 bytes
+const char *PinNodeCtrl_NodeMessage();                     // the node's message while it shows ("PINNODE  NOT SET UP"), else NULL
+byte PinNodeCtrl_LastMode(byte *ball, byte *slot);         // the mode last reported (0xFF before the first)
+
 // Achievements (ACH 0x25) and stats (STAT 0x26), keyed by the manifest's achievements[].index and
 // stats[].index (SPEC-node-link §3.1). slot is 1-4. An achievement goes at once (v = optional
 // detail). Stats are coalesced in RAM per (slot, stat, op) and sent at BallEnd, GameEnd, or

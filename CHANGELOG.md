@@ -1,5 +1,12 @@
 # Changes
 
+## 0.3.13
+
+- Status screen on the RPU board's OLED (Rev 4 and 102): the link, WiFi and cloud, setup messages,
+  the mode, check-ins, claim codes and phone tests. Optional: `#define PINNODE_OLED` and the U8g2
+  library. The converter places the calls.
+- The Library Manager's "More info" link goes to this repo.
+
 ## 0.3.12
 
 - Install from the Arduino IDE's Library Manager: search **PinNode**. Updates show up there too.

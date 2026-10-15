@@ -527,6 +527,32 @@ The CRC-32 of your program, sent in HELLO.
 
 ---
 
+## 16. Status screen on the board's OLED (optional)
+
+RPU Rev 4 and 102: a 128x64 I2C OLED on the Mega's SDA/SCL (D20/D21). Needs the U8g2 library and
+`#define PINNODE_OLED` (add `#define PINNODE_OLED_SSD1306` for a 0.96" SSD1306; SH1106 is the
+default). Without `PINNODE_OLED` both calls are empty.
+
+### `void PinNode_OledBegin()`
+In `setup()`. Starts the display (I2C at 400 kHz) and clears it.
+
+### `void PinNode_OledUpdate(unsigned long now)`
+Every `loop()` pass. Redraws at most one changed line, every 25 ms or more.
+
+| Line | Shows |
+|---|---|
+| 1 | `PinNode link ok`, `no node`, or `...` while it connects |
+| 2 | `WiFi ok Cloud ok` (or `--`), from the node's status |
+| 3 | The node's message, for example `NOT SET UP` |
+| 4 | The mode (`Attract`, `Game  ball 2 P1`, `Operator menu`), or the phone test running |
+| 5–6 | Who's checked in, by slot, or `Next game: ABC` |
+| 7 | A claim code (`P2 code 123456`), taking turns if there are several |
+| 8 | Link errors, if any (`bad 3 drop 0`) |
+
+What it reads is also there for your own display code:
+`PinNodeCtrl_NodeStatus(&wifi, &cloud)`, `PinNodeCtrl_CheckedIn(slot, initials)` (slot 0 = waiting
+for the next game), `PinNodeCtrl_NodeMessage()` and `PinNodeCtrl_LastMode(&ball, &slot)`.
+
 ## Building without PinNode
 
 `#define PINNODE_DISABLED` before `#include <PinNode.h>`: every call becomes an empty stand-in

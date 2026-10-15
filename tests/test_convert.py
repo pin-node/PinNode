@@ -281,3 +281,14 @@ def test_phone_tests_on_the_example_machine():
     assert ids[:7] == ["lamp-test", "display-test", "solenoid-test", "switch-test", "clear-audits",
                        "enter-diagnostics", "exit-diagnostics"]                        # PinNode.h's order
     assert [a["index"] for a in r.manifest["actions"]] == list(range(len(ids)))
+
+
+def test_oled_status_screen_on_the_example_machine():
+    # RPU Rev 4/102 OLED header: the converter places both calls; they do nothing without PINNODE_OLED
+    r = convert(FIX / "example-machine", machine="Example Machine")
+    assert any(h.name == "OLED status screen" and h.placed and h.where != "not needed" for h in r.hooks)
+    ino = _zip(r).read("ExampleMachineMEGA/ExampleMachineMEGA.ino").decode()
+    setup = _func(ino, "setup")
+    assert setup.index("PinNode_OledBegin();") < setup.index("RPULink_BeginUart();   // RPU board")
+    loop = _func(ino, "loop")
+    assert loop.index("CurrentTime = millis();") < loop.index("PinNode_OledUpdate(CurrentTime);")
