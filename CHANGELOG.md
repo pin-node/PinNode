@@ -1,5 +1,10 @@
 # Changes
 
+## 0.3.20
+
+- `PinNodeCtrl_Scores` waits for the game's first `BallStart`: no live score with player 0, ball 0 as a
+  game opens (found by the Star Trek sim).
+
 ## 0.3.19
 
 - `PinNodeCtrl_Scores(scores, numPlayers)`: live scores for phones at the machine. Call it every

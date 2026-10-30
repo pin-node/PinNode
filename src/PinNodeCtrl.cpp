@@ -760,6 +760,7 @@ void PinNodeCtrl_GameStart(byte credits, boolean freePlay) {
   EEPROM.update(PINNODE_EEPROM_GAME_COUNTER + 1, (byte)(gameCounter >> 8));
   gameOpen = true;
   ballOpen = false;
+  openSlot = openBall = 0;                     // no ball yet (live scores wait for BallStart)
   for (byte i = 0; i < PINNODE_STAT_SLOTS; i++) pendStat[i].used = 0;
   for (byte i = 0; i < 4; i++) claimCode[i] = 0;   // a new game ends the last one's claim window
   gameStartMs = millis();
@@ -802,6 +803,7 @@ static boolean liveAny;
 
 void PinNodeCtrl_Scores(const unsigned long *scores, byte numPlayers) {
   if (!gameOpen || !scores) { liveAny = false; return; }
+  if (!openSlot || !openBall) return;          // not before the first BallStart: no player up or ball yet
   unsigned long now = millis();
   byte n = numPlayers > 4 ? 4 : numPlayers;
   boolean changed = !liveAny || n != livePlayers || openSlot != liveUp || openBall != liveBall;

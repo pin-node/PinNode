@@ -104,6 +104,8 @@ int main() {
 
   // a game: stats coalesce until BallEnd and go ahead of BALL_END
   PinNodeCtrl_GameStart(1, false);
+  { unsigned long z[4] = {0, 0, 0, 0}; PinNodeCtrl_Scores(z, 1); }   // before the first BallStart: nothing
+  CHECK(count(0x3C) == 0);
   PinNodeCtrl_BallStart(1, 1);
   PinNodeCtrl_BallStart(1, 1);                                  // ball save re-serve: one ball_start
   CHECK(count(0x22) == 1);
