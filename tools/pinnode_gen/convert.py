@@ -225,12 +225,39 @@ class Converter:
                   "  }", "}", ""]
         main.insert(pos, _block(lines, ""))
 
-    def setup(self, main: Source, n_settings: int, n_audits: int) -> None:
+    def settings_applied(self, main: Source) -> Optional[str]:
+        """An app setting is in EEPROM: apply it now, as the game does at boot (ReadStoredParameters).
+        The music playing fades to a new music volume (RPU's AudioHandler sets music gain only when a
+        track starts; restarting the track popped). Returns the callback's name, or None."""
+        if not self.has("ReadStoredParameters"):
+            self.missed("settings applied", "no ReadStoredParameters: app settings apply at the next restart")
+            return None
+        music = all(self.has(i) for i in ("MusicVolume", "FadeSound", "GetBackgroundSong", "BACKGROUND_TRACK_NONE")) \
+            and re.search(r"\bAudioHandler\s+Audio\b", self.all_text) is not None
+        lines = [f"{MARK}: an app setting changed (it's in EEPROM already): apply it now, as at boot",
+                 "static void PinNodeSettingsApplied() {"]
+        if music:
+            lines.append("  byte musicVolumeBefore = MusicVolume;")
+        lines.append("  ReadStoredParameters();")
+        if music:
+            lines += ["  // the music playing fades to a new music volume (RPU's 0-10 -> dB table); at 0 it fades out",
+                      "  if (MusicVolume != musicVolumeBefore && Audio.GetBackgroundSong() != BACKGROUND_TRACK_NONE) {",
+                      "    static const signed char gainDb[11] = {-70, -18, -16, -14, -12, -10, -8, -6, -4, -2, 0};",
+                      "    Audio.FadeSound(Audio.GetBackgroundSong(), gainDb[MusicVolume > 10 ? 10 : MusicVolume], 300, MusicVolume == 0);",
+                      "  }"]
+        lines += ["}", ""]
+        m = re.search(r"^[ \t]*void[ \t]+setup[ \t]*\(", main.text, re.M)
+        pos = _line_start(main.text, m.start()) if m else 0
+        main.insert(pos, "\n".join(lines) + "\n")
+        self.placed("settings applied", main, pos, "before setup", "music fades" if music else "")
+        return "PinNodeSettingsApplied"
+
+    def setup(self, main: Source, n_settings: int, n_audits: int, applied: Optional[str] = None) -> None:
         fn = _function(main, "setup")
         body_start, close, _ = fn
         ind = _indent_at(main.text, body_start + 1) or "  "
         lines = ["", f"{MARK}: start the link to the node and say hello",
-                 "PinNodeCtrl_Settings(PinNodeSettingsTable, sizeof(PinNodeSettingsTable) / sizeof(PinNodeSettingsTable[0]), NULL);"
+                 f"PinNodeCtrl_Settings(PinNodeSettingsTable, sizeof(PinNodeSettingsTable) / sizeof(PinNodeSettingsTable[0]), {applied or 'NULL'});"
                  if n_settings else "// PinNodeCtrl_Settings(...): no settings found to map",
                  "PinNodeCtrl_Audits(PinNodeAuditsTable, sizeof(PinNodeAuditsTable) / sizeof(PinNodeAuditsTable[0]));"
                  if n_audits else "// PinNodeCtrl_Audits(...): no audits found to map",
@@ -275,6 +302,7 @@ class Converter:
                   if self.has("OperatorMenusActive") else "  byte mode = MachineState < 0 ? PINNODE_MODE_SERVICE")
                  + " : inGame ? PINNODE_MODE_GAME : PINNODE_MODE_ATTRACT;",
                  "  PinNodeCtrl_Mode(mode, inGame ? CurrentBallInPlay : 0, inGame ? CurrentPlayer + 1 : 0);",
+                 "  PinNodeCtrl_Scores(CurrentScores, CurrentNumPlayers);   // live scores for phones at the machine",
                  *credit_add,
                  f"  PinNodeCtrl_Credits(Credits, {fp});   // the app shows the machine's credits",
                  "  uint16_t startReq;",
@@ -952,7 +980,9 @@ def convert(src_dir: Path, *, machine: Optional[str] = None, ruleset_id: Optiona
     # hooks: the order matters only in that each re-finds its anchor after the edits before it
     conv.include(main)
     conv.tables(main, settings, audit_defines)
-    conv.setup(main, len([s for s in settings if s.get("source", {}).get("eeprom") is not None]), len(audit_defines))
+    n_eeprom_settings = len([s for s in settings if s.get("source", {}).get("eeprom") is not None])
+    applied = conv.settings_applied(main) if n_eeprom_settings else None
+    conv.setup(main, n_eeprom_settings, len(audit_defines), applied)
     conv.loop(main)
     conv.game_start()
     conv.player_added()

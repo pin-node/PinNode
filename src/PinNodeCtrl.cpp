@@ -3,10 +3,15 @@
  **************************************************************************/
 // PINNODE_HOST_BUILD: compile natively for tests, against host shims of Arduino.h, EEPROM.h and
 // avr/wdt.h and a fake RPULink (see tests/native). RPULink.cpp and the transports stay out.
-#if defined(ARDUINO_ARCH_AVR) || defined(PINNODE_HOST_BUILD)
+#if defined(ARDUINO_ARCH_AVR) || defined(ARDUINO_ARCH_RP2040) || defined(PINNODE_HOST_BUILD)
 
 #include <Arduino.h>
+#include <stdarg.h>
+#if defined(ARDUINO_ARCH_RP2040)
+#include <hardware/watchdog.h>
+#else
 #include <avr/wdt.h>
+#endif
 #include <EEPROM.h>
 #include "RPULink.h"
 #include "PinNodeCtrl.h"
@@ -16,13 +21,23 @@
 #error "PinNode needs an AVR with 4 KB of EEPROM (ATmega2560, the Arduino Mega)"
 #endif
 
+// The RP2350's EEPROM must be opened before use. PinNode can run before RPU_InitializeMPU (which
+// opens it too, only if nobody has): open it here if needed, at the Mega's 4 KB.
+static void EepromReady() {
+#if defined(ARDUINO_ARCH_RP2040)
+  if (EEPROM.length() == 0) EEPROM.begin(4096);
+#endif
+}
+
 // The game's EEPROM layout, as the RPU OS stores it: unsigned longs little-endian, erased = 0xFF.
 static unsigned long EepromReadUL(unsigned short a) {
+  EepromReady();
   unsigned long v = 0;
   for (byte i = 0; i < 4; i++) v |= (unsigned long)EEPROM.read(a + i) << (8 * i);
   return v == 0xFFFFFFFFUL ? 0 : v;
 }
 static void EepromWriteUL(unsigned short a, unsigned long v) {
+  EepromReady();
   for (byte i = 0; i < 4; i++) EEPROM.update(a + i, (byte)(v >> (8 * i)));
 }
 
@@ -48,6 +63,10 @@ static void SendSettingsReport();
 static void SendActionsReport();
 static boolean firstHello = true;
 static boolean auditPending = false;       // an AUDIT_SNAPSHOT is due (sent from Update)
+
+static unsigned long initResult;
+static boolean initNoted;
+void PinNodeCtrl_NoteInitResult(unsigned long r) { initResult = r; initNoted = true; }
 
 static void SendHello() {
   // HELLO: proto u8 = 2, buildId u32, manifestHash[8], version (len-prefixed, <= 20),
@@ -78,23 +97,52 @@ static void SendHello() {
   buf[0] = rl;
   memcpy(buf + 1, helloRuleset, rl);
   RPULink_Queue(RPULINK_HELLO_EXT, buf, 1 + rl);
+  if (initNoted) {                           // why this start chose this game or the original
+    char t[24];
+    snprintf(t, sizeof t, "rpu init 0x%04lx", initResult);
+    RPULink_QueueText(RPULINK_LOG, t);
+  }
   SendSettingsReport();                      // the node's settings view starts from this
   SendActionsReport();                       // and its action flags (local, confirm, lock…)
   auditPending = true;                       // and its audits (sent from Update, after this burst)
 }
 
+// Restart the board. The RP2350 (PinNode 400) keeps EEPROM as a RAM copy of a flash sector:
+// save it first, or the boot choice just written is lost.
+static void Restart() {
+#if defined(ARDUINO_ARCH_RP2040)
+  EEPROM.commit();
+  watchdog_reboot(0, 0, 10);
+#else
+  wdt_enable(WDTO_15MS);
+#endif
+  for (;;);
+}
+
 // CRC-32 (IEEE) of the program image, flash 0 .. __data_load_end, as the service computes it
 // from the release .hex (SPEC-node-link §4). Nibble table: small and fast enough at boot.
+// On the RP2350: the image from the start of flash to __flash_binary_end, rounded up to 256 bytes.
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+extern char __flash_binary_start, __flash_binary_end;
+#else
 extern char __data_load_end;
+#endif
 static const uint32_t crcNibble[16] PROGMEM = {
   0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC, 0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C,
   0xEDB88320, 0xF00F9344, 0xD6D6A3E8, 0xCB61B38C, 0x9B64C2B0, 0x86D3D2D4, 0xA00AE278, 0xBDBDF21C};
 
 uint32_t PinNodeCtrl_BuildId() {
-  uint32_t end = pgm_get_far_address(__data_load_end);
   uint32_t crc = 0xFFFFFFFFUL;
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+  // whole 256-byte pages: a UF2 carries the image that way, so the node's CRC of a .uf2 matches
+  const char *end = &__flash_binary_start + ((&__flash_binary_end - &__flash_binary_start + 255) & ~255);
+  for (const char *p = &__flash_binary_start; p < end; p++) {
+    crc ^= (uint8_t)*p;
+#else
+  uint32_t end = pgm_get_far_address(__data_load_end);
   for (uint32_t a = 0; a < end; a++) {
     crc ^= pgm_read_byte_far(a);
+#endif
     crc = (crc >> 4) ^ pgm_read_dword(&crcNibble[crc & 0x0F]);
     crc = (crc >> 4) ^ pgm_read_dword(&crcNibble[crc & 0x0F]);
   }
@@ -215,6 +263,62 @@ boolean PinNodeCtrl_SettingLocked(byte index) {
   return settingsLocked && index < setCount && setTable[index].difficulty;
 }
 
+// A volume changed from the app: the player plays a short pip at the new level, as the operator menu's
+// own sample would (RPU volume settings: live-safe, 0-10, a byte; RPU's 0-10 -> dB table). The 400's
+// player makes the tone itself (weak: other boards have none, so nothing plays).
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+extern "C" void PinNode400_Pip(int gainDb) __attribute__((weak));
+static const signed char volumeGainDb[11] = {-70, -18, -16, -14, -12, -10, -8, -6, -4, -2, 0};
+
+void PinNode_VolumePip(byte level) {
+  if (!PinNode400_Pip || level == 0 || level > 10) return;
+  PinNode400_Pip(volumeGainDb[level]);
+}
+#else
+void PinNode_VolumePip(byte level) { (void)level; }       // no player of ours on this board
+#endif
+
+// ------------------------------------------------------------------ developer log
+
+static unsigned long logWindowMs;
+static byte logInWindow;
+static unsigned int logDropped;
+
+void PinNode_Log(const char *fmt, ...) {
+  unsigned long now = millis();
+  if (now - logWindowMs >= 1000) { logWindowMs = now; logInWindow = 0; }
+  if (logInWindow >= PINNODE_LOG_PER_S) { logDropped++; return; }
+  char line[121];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(line, sizeof line, fmt, ap);
+  va_end(ap);
+  if (logDropped) {                        // say what was lost before this line
+    char d[32];
+    snprintf(d, sizeof d, "(%u lines dropped)", logDropped);
+    if (!RPULink_QueueText(RPULINK_LOG, d)) return;
+    logDropped = 0;
+    logInWindow++;
+  }
+  // a LOG record carries up to 54 bytes of text: longer lines go in pieces, the later ones marked
+  size_t n = strlen(line), at = 0;
+  char part[55];
+  while (at < n || n == 0) {
+    size_t k = n - at > 53 ? 53 : n - at;
+    part[0] = at ? '~' : ' ';                // '~': continues the line before
+    memcpy(part + 1, line + at, k);
+    part[k + 1] = 0;
+    if (!RPULink_QueueText(RPULINK_LOG, part)) { logDropped++; return; }
+    at += k;
+    if (n == 0) break;
+  }
+  logInWindow++;
+}
+
+static boolean IsVolumeSetting(const PinNodeSetting &st) {
+  return st.liveSafe && st.size == 1 && st.minValue == 0 && st.maxValue == 10 && st.scale == 1;
+}
+
 static void SettingSet(const byte *d, byte len) {
   uint16_t req = (uint16_t)(d[0] | (d[1] << 8));
   byte idx = d[2];
@@ -234,6 +338,7 @@ static void SettingSet(const byte *d, byte len) {
     else EEPROM.update(st.eeprom, (byte)stored);
     AdjustmentsLoad();                       // an app Settings entry may be one of ours
     if (setApplied) setApplied();
+    if (IsVolumeSetting(st)) PinNode_VolumePip((byte)v);
   }
   byte r[9];
   r[0] = idx;
@@ -387,11 +492,13 @@ static void ActionsTick(unsigned long now, boolean linkUp) {
 
 static unsigned long claimCode[4];          // 0 = none; per slot (1-based slot = index + 1)
 static unsigned long claimUntilMs;
+static boolean claimIsPairing;              // g = 0xFFFF: a pairing code (SPEC-dev-flash §9.2 B), shown steady
 
 // CLAIM_DISPLAY (0xA9): g u16, n u8, n x (slot u8, code u32), secs u16
 static void ClaimDisplay(const byte *d, byte len) {
   byte n = d[2];
   if (len < 3 + 5 * n + 2) return;
+  claimIsPairing = d[0] == 0xFF && d[1] == 0xFF;
   for (byte i = 0; i < 4; i++) claimCode[i] = 0;
   for (byte i = 0; i < n; i++) {
     const byte *e = d + 3 + 5 * i;
@@ -402,6 +509,8 @@ static void ClaimDisplay(const byte *d, byte len) {
   unsigned int secs = d[3 + 5 * n] | (d[4 + 5 * n] << 8);
   claimUntilMs = millis() + 1000UL * secs;
 }
+
+boolean PinNodeCtrl_ClaimIsPairing() { return claimIsPairing; }
 
 boolean PinNodeCtrl_ClaimCode(byte slot, unsigned long *code) {
   if (slot < 1 || slot > 4 || !claimCode[slot - 1]) return false;
@@ -439,8 +548,62 @@ static boolean bootPending = false;
 static uint16_t bootReq;
 static byte bootTarget;
 
-boolean PinNodeCtrl_OriginalChosen() { return EEPROM.read(PINNODE_EEPROM_BOOT_TARGET) == 'O'; }
-void PinNodeCtrl_SetBootTarget(byte original) { EEPROM.update(PINNODE_EEPROM_BOOT_TARGET, original ? 'O' : 0xFF); }
+boolean PinNodeCtrl_OriginalChosen() { EepromReady(); return EEPROM.read(PINNODE_EEPROM_BOOT_TARGET) == 'O'; }
+void PinNodeCtrl_SetBootTarget(byte original) { EepromReady(); EEPROM.update(PINNODE_EEPROM_BOOT_TARGET, original ? 'O' : 0xFF); }
+
+// SOUND_PREVIEW (0xAD): reqId u16, op u8 (1 play, 0 stop), path (no NUL): the owner plays a file from the
+// card on the machine from the app (outside games). Answered at once, and again when it ends, with
+// SOUND_STATE (0x3A): reqId u16, state u8 (PINNODE_PREVIEW_...). PinNode 400: RPU400Audio plays it.
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+extern "C" int PinNode400_Preview(int op, const char *path) __attribute__((weak));
+extern "C" int PinNode400_PreviewPoll() __attribute__((weak));
+#endif
+boolean PinNodeCtrl_BulkAllowed();           // below: attract or the operator menus
+static uint16_t previewReq;
+static boolean previewOn = false, previewAnswered = false;
+static unsigned long previewAtMs;
+
+static void PreviewState(uint16_t req, byte state) {
+  byte r[3] = {(byte)req, (byte)(req >> 8), state};
+  RPULink_Queue(0x3A, r, 3);
+}
+
+static void SoundPreview(const byte *d, byte len) {
+  uint16_t req = (uint16_t)(d[0] | (d[1] << 8));
+  char path[49];
+  byte n = len - 3 < 48 ? len - 3 : 48;
+  memcpy(path, d + 3, n);
+  path[n] = 0;
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+  if (!PinNode400_Preview) { PreviewState(req, PINNODE_PREVIEW_UNSUPPORTED); return; }
+  if (d[2] && !PinNodeCtrl_BulkAllowed()) { PreviewState(req, PINNODE_PREVIEW_NOT_NOW); return; }
+  int st = PinNode400_Preview(d[2] ? 1 : 0, path);
+  previewOn = false;
+  if (d[2] && st == PINNODE_PREVIEW_PLAYING) {   // starting: the answer waits until its file opens (or not)
+    previewReq = req; previewOn = true; previewAnswered = false; previewAtMs = millis();
+    return;
+  }
+  PreviewState(req, (byte)st);
+#else
+  (void)path;
+  PreviewState(req, PINNODE_PREVIEW_UNSUPPORTED);
+#endif
+}
+
+static void PreviewTick() {
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+  if (!previewOn || !PinNode400_PreviewPoll) return;
+  int st = PinNode400_PreviewPoll();
+  if (st == 10 || (!st && !previewAnswered && millis() - previewAtMs > 2000)) {   // it plays
+    if (!previewAnswered) PreviewState(previewReq, PINNODE_PREVIEW_PLAYING);
+    previewAnswered = true;
+    return;
+  }
+  if (!st) return;
+  previewOn = false;                         // ended, or the file didn't open
+  PreviewState(previewReq, (byte)st);
+#endif
+}
 
 static void HandleRecord(byte type, const byte *data, byte len) {
   if (recordHook && recordHook(type, data, len)) return;
@@ -467,6 +630,8 @@ static void HandleRecord(byte type, const byte *data, byte len) {
     uint16_t req = (uint16_t)(data[0] | (data[1] << 8));
     if (creditPending) { PinNodeCtrl_CreditResult(req, PINNODE_CREDIT_NOT_NOW, 0, 0); return; }
     creditReq = req; creditN = data[2]; creditAtMs = millis(); creditPending = true;
+  } else if (type == 0xAD && len >= 3) {      // SOUND_PREVIEW
+    SoundPreview(data, len);
   } else if (type == 0xAC && len >= 3) {      // BOOT_SELECT
     bootReq = (uint16_t)(data[0] | (data[1] << 8));
     bootTarget = data[2] ? 1 : 0;
@@ -629,6 +794,28 @@ void PinNodeCtrl_BallStart(byte slot, byte ball) {
   RPULink_Queue(0x22, d, 4);
 }
 
+#define PINNODE_LIVE_MIN_MS    250UL       // at most 4 a second
+#define PINNODE_LIVE_EVERY_MS  2000UL      // and at least this often, so a phone that just arrived catches up
+static unsigned long liveSent[4], liveMs;
+static byte livePlayers, liveUp, liveBall;
+static boolean liveAny;
+
+void PinNodeCtrl_Scores(const unsigned long *scores, byte numPlayers) {
+  if (!gameOpen || !scores) { liveAny = false; return; }
+  unsigned long now = millis();
+  byte n = numPlayers > 4 ? 4 : numPlayers;
+  boolean changed = !liveAny || n != livePlayers || openSlot != liveUp || openBall != liveBall;
+  for (byte i = 0; i < 4 && !changed; i++) changed = (i < n ? scores[i] : 0) != liveSent[i];
+  if (liveAny && now - liveMs < (changed ? PINNODE_LIVE_MIN_MS : PINNODE_LIVE_EVERY_MS)) return;
+  byte d[5 + 16];
+  put16(d, gameCounter);
+  d[2] = n; d[3] = openSlot; d[4] = openBall;
+  for (byte i = 0; i < 4; i++) put32(d + 5 + 4 * i, i < n ? scores[i] : 0);
+  if (!RPULink_Queue(0x3C, d, sizeof d)) return;
+  for (byte i = 0; i < 4; i++) liveSent[i] = i < n ? scores[i] : 0;
+  livePlayers = n; liveUp = openSlot; liveBall = openBall; liveMs = now; liveAny = true;
+}
+
 void PinNodeCtrl_BallEnd(byte slot, byte ball, unsigned long score) {
   if (!gameOpen) return;
   ballOpen = false;
@@ -680,6 +867,7 @@ void PinNodeCtrl_Tilt(byte slot, byte kind) {
 
 void PinNodeCtrl_Begin(const char *version, const char *rulesetId, const byte *manifestHash,
                        byte maxPlayers, byte settingsCount, uint16_t hwRev) {
+  EepromReady();
   AdjustmentsLoad();
   helloHwRev = hwRev;
   helloVersion = version;
@@ -802,6 +990,55 @@ static void PumpLink(unsigned long ms) {
   while ((millis() - start) < ms) RPULink_Update(millis());
 }
 
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+// PinNode 400: the node reflashes the RP over SWD, so every RPU game has the same safe state, from
+// RPU's own calls (weak: without RPU OS linked in, there is no handler and updates are refused).
+// The SWD flash halts the RP with the 6800 still halted: whatever the PIAs hold then stays, so coils
+// and flippers go off and the displays blank first, and the interrupts get time to write that out.
+void RPU_DisableSolenoidStack() __attribute__((weak));
+void RPU_SetDisableFlippers(boolean disableFlippers, byte solbit) __attribute__((weak));
+void RPU_TurnOffAllLamps() __attribute__((weak));
+void RPU_SetDisplayBlank(int displayNumber, byte bitMask) __attribute__((weak));
+extern "C" void PinNode400_AudioSilence() __attribute__((weak));   // the game's player: stop, flush to silence
+
+static void Rev400OtaHandler(byte phase) {
+  if (phase != PINNODE_OTA_PHASE_SAFE) return;
+  // the halt freezes the DAC on whatever its buffers hold: silence first
+  if (PinNode400_AudioSilence) PinNode400_AudioSilence();
+  RPU_DisableSolenoidStack();               // no new coils; one already firing ends on its timer
+  RPU_SetDisableFlippers(true, 0x40);       // CONTSOL_DISABLE_FLIPPERS
+  RPU_TurnOffAllLamps();
+  for (int d = 0; d < 5; d++) RPU_SetDisplayBlank(d, 0x00);
+  delay(250);                                // the timer interrupts write it all out
+}
+
+static boolean Rev400HasRpu() {
+  return RPU_DisableSolenoidStack && RPU_SetDisableFlippers && RPU_TurnOffAllLamps && RPU_SetDisplayBlank;
+}
+#endif
+
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+// PinNode 400 bulk mode (files to the SD card): only in attract or the operator menus
+boolean PinNodeCtrl_BulkAllowed() { return curMode == PINNODE_MODE_ATTRACT || curMode == PINNODE_MODE_SERVICE; }
+
+// The RP's SD card (the game's player, weak): CARD_STATUS after HELLO and on a change, for the
+// node's health report (the site offers "Upload sounds" only with a card)
+extern "C" int PinNode400_CardStatus(unsigned int *tracks) __attribute__((weak));
+// The game's sound player, a status line when it has a new one (its startup, its output): to the node
+// log as a LOG record, so its state is visible without the RP's USB
+extern "C" int PinNode400_AudioStatus(char *out, unsigned int size) __attribute__((weak));
+static int lastCardOk = -1;
+static unsigned int lastCardTracks;
+static void CardStatusTick(boolean force) {
+  if (!PinNode400_CardStatus) return;
+  unsigned int tracks = 0;
+  int ok = PinNode400_CardStatus(&tracks) ? 1 : 0;
+  if (!force && ok == lastCardOk && tracks == lastCardTracks) return;
+  byte r[3] = {(byte)ok, (byte)tracks, (byte)(tracks >> 8)};
+  if (RPULink_Queue(RPULINK_CARD_STATUS, r, 3)) { lastCardOk = ok; lastCardTracks = tracks; }
+}
+#endif
+
 static void EnterOtaSafeState() {
   otaHandler(PINNODE_OTA_PHASE_NOTICE);  // e.g. "UPDATING" on the displays
   PumpLink(300);                         // let it show, keeping the link alive
@@ -812,8 +1049,7 @@ static void EnterOtaSafeState() {
 
   // no reset came: back to the game through the bootloader
   otaHandler(PINNODE_OTA_PHASE_ABORT);
-  wdt_enable(WDTO_15MS);
-  for (;;);
+  Restart();
 }
 
 static void BootResult(byte result) {
@@ -827,7 +1063,8 @@ static void ServeBootSelect() {
   if (!bootPending) return;
   bootPending = false;
   boolean original = curMode == PINNODE_MODE_ORIGINAL;
-  if (bootTarget && (helloHwRev < 4 || helloHwRev >= 300)) { BootResult(PINNODE_BOOT_UNSUPPORTED); return; }
+  // Boot select needs a board that can run the original: Rev 4/10x (Mega) and 400 (RP2350)
+  if (bootTarget && (helloHwRev < 4 || (helloHwRev >= 300 && helloHwRev != 400))) { BootResult(PINNODE_BOOT_UNSUPPORTED); return; }
   if ((boolean)bootTarget == original) { BootResult(PINNODE_BOOT_ALREADY); return; }
   if (!original && curMode != PINNODE_MODE_ATTRACT) { BootResult(PINNODE_BOOT_NOT_NOW); return; }
   PinNodeCtrl_SetBootTarget(bootTarget);
@@ -837,8 +1074,7 @@ static void ServeBootSelect() {
   unsigned long t0 = millis();
   do RPULink_Update(millis()); while (RPULink_Pending() && millis() - t0 < 2000UL);
   PumpLink(50);
-  wdt_enable(WDTO_15MS);                   // restart through the bootloader, like the OTA abort
-  for (;;);
+  Restart();                               // restart through the bootloader, like the OTA abort
 }
 
 boolean PinNodeCtrl_TakeStartRequest(uint16_t *reqId) {
@@ -889,13 +1125,32 @@ void PinNodeCtrl_Update(unsigned long now, boolean otaAllowed) {
     SendHello();
     lastMode = 0xFF;                        // and repeat the mode
     lastCredits = 0xFF;                     // and the credits
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+    CardStatusTick(true);
+#endif
   }
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+  static unsigned long lastCardMs;
+  if (up && now - lastCardMs > 2000) {
+    lastCardMs = now;
+    CardStatusTick(false);
+    char line[60];
+    if (PinNode400_AudioStatus && PinNode400_AudioStatus(line, sizeof line)) RPULink_QueueText(RPULINK_LOG, line);
+  }
+#endif
+  if (up) PreviewTick();
   DebugTick(now, up);
   linkWasUp = up;
 
   if (!otaRequested) return;
   otaRequested = false;
 
+#if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
+  // PinNode 400: updates come over SWD, whatever the game passes (its false is for the WiFi socket);
+  // only in attract or the operator menus
+  if (!otaHandler && Rev400HasRpu()) otaHandler = Rev400OtaHandler;
+  otaAllowed = curMode == PINNODE_MODE_ATTRACT || curMode == PINNODE_MODE_SERVICE;
+#endif
   if (!otaHandler || !otaAllowed) {          // no safe state on this board, or not now
     byte reason = otaHandler ? PINNODE_OTA_REFUSED_GAME_IN_PROGRESS : PINNODE_OTA_REFUSED_NOT_SUPPORTED;
     RPULink_Queue(RPULINK_CTRL_OTA_REFUSED, &reason, 1);

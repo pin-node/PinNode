@@ -3,10 +3,20 @@
  * format. The transport (UART or SPI) lives in transport/ and is chosen by
  * calling RPULink_BeginUart() or RPULink_BeginSpi(); only that one is linked.
  **************************************************************************/
-#if defined(ARDUINO_ARCH_AVR) || defined(PINNODE_HOST_BUILD)
+#if defined(ARDUINO_ARCH_AVR) || defined(ARDUINO_ARCH_RP2040) || defined(PINNODE_HOST_BUILD)
 
 #include "RPULink.h"
 #include "RPULinkInternal.h"
+
+// The ring buffers are shared with the transport's interrupts: lock them briefly
+#if defined(ARDUINO_ARCH_RP2040)
+#include <hardware/sync.h>
+#define LINK_LOCK()    uint32_t linkIrqState = save_and_disable_interrupts()
+#define LINK_UNLOCK()  restore_interrupts(linkIrqState)
+#else
+#define LINK_LOCK()    byte linkIrqState = SREG; cli()
+#define LINK_UNLOCK()  SREG = linkIrqState
+#endif
 
 static RPULinkRecordHandler linkHandler = NULL;
 static const RPULinkTransport *transport = NULL;
@@ -85,10 +95,9 @@ boolean RPULink_Queue(byte type, const byte *data, byte len) {
   if (len > RPULINK_PAYLOAD_MAX - 2) { droppedRecords++; return false; }
   LinkRing *r = (type >= RPULINK_AUDIO_PLAY_POLY && type <= RPULINK_AUDIO_RATE_OFFSET) ? &txAudio : &txRing;
   unsigned int need = 2 + len;
-  byte sreg = SREG;
-  cli();
+  LINK_LOCK();
   if (r->size - r->used < need) {
-    SREG = sreg;
+    LINK_UNLOCK();
     droppedRecords++;
     return false;
   }
@@ -99,16 +108,15 @@ boolean RPULink_Queue(byte type, const byte *data, byte len) {
     r->head = (r->head + 1) % r->size;
   }
   r->used += need;
-  SREG = sreg;
+  LINK_UNLOCK();
   return true;
 }
 
 
 void RPULink_DropQueued() {
-  byte sreg = SREG;
-  cli();
+  LINK_LOCK();
   txRing.head = txRing.tail = txRing.used = 0;
-  SREG = sreg;
+  LINK_UNLOCK();
 }
 
 boolean RPULink_QueueText(byte type, const char *text) {
@@ -134,11 +142,10 @@ static void TakeFromRing(LinkRing *r) {
 
 static void BuildNextPayload() {
   txPayloadLen = 0;
-  byte sreg = SREG;
-  cli();
+  LINK_LOCK();
   TakeFromRing(&txAudio);
   TakeFromRing(&txRing);
-  SREG = sreg;
+  LINK_UNLOCK();
   if (txPayloadLen) {
     txSeq = (txSeq == 255) ? 1 : txSeq + 1;     // 0 is reserved for "nothing sent yet"
   }

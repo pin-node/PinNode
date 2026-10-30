@@ -102,6 +102,18 @@ Doesn't return once a firmware update is accepted (the node resets the Mega).
 | `ball` | `byte` | Ball in play, 0 outside a game |
 | `slot` | `byte` | Player up, 0 outside a game |
 
+### `void PinNodeCtrl_Scores(const unsigned long *scores, byte numPlayers)`
+**Recommended.** Every `loop()` pass, right after `PinNodeCtrl_Mode`.
+**Why:** phones at the machine show the scores live as the game is played.
+
+During a game it's sent when a score changes (at most 4 times a second) and at least every 2 s. The player
+up and the ball come from the last `PinNodeCtrl_BallStart`. Outside a game it does nothing.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `scores` | `const unsigned long *` | The game's score array (`CurrentScores`), up to 4 players |
+| `numPlayers` | `byte` | Players in the game (`CurrentNumPlayers`) |
+
 ### `void PinNodeCtrl_Credits(byte credits, boolean freePlay)`
 **Recommended.** Every `loop()` pass; sent only when it changes.
 **Why:** the app shows credits and hides Start when there are none.

@@ -107,6 +107,10 @@ void PinNodeCtrl_CreditResult(uint16_t reqId, byte result, byte n, byte credits)
 #define PINNODE_TILT_SLAM      2
 
 void PinNodeCtrl_Mode(byte mode, byte ball, byte slot);   // call every loop: sent on change
+// Live scores for phones near the machine (LIVE_SCORE 0x3C, SPEC-player-checkin §3.6): call every loop with
+// the game's score array. During a game it's sent on a change (at most 4 a second) and at least every 2 s,
+// with the player up and ball from the last BallStart. Outside a game it does nothing.
+void PinNodeCtrl_Scores(const unsigned long *scores, byte numPlayers);
 void PinNodeCtrl_GameStart(byte credits, boolean freePlay);
 void PinNodeCtrl_PlayerAdded(byte slot);
 void PinNodeCtrl_BallStart(byte slot, byte ball);
@@ -143,6 +147,9 @@ void PinNodeCtrl_Credits(byte credits, boolean freePlay);
 // PinNode.h around RPU_InitializeMPU; these are what they call.
 boolean PinNodeCtrl_OriginalChosen();
 void PinNodeCtrl_SetBootTarget(byte original);   // 1 = the original game, 0 = this game
+// RPU_InitializeMPU's result: sent to the node as a LOG line after each HELLO ("rpu init 0x....",
+// the RPU_RET_ bits), so the node log says why a start chose the original game
+void PinNodeCtrl_NoteInitResult(unsigned long initResult);
 
 // Report under another identity (ruleset, version, manifest hash, build) with the given HELLO flags; the
 // HELLO is sent afresh with whatever settings, actions and audits are registered (set them first).
@@ -188,6 +195,32 @@ long PinNodeCtrl_ClearAudits();       // send them, then zero every registered a
 // for each slot nobody checked in to. Show it in that slot's score window during attract,
 // alternating with the score, until the window ends or the next game starts.
 boolean PinNodeCtrl_ClaimCode(byte slot, unsigned long *code);   // slot 1-4; false if none
+// The code up now is a pairing code (the owner pairing a computer at the machine):
+// PinNode_ShowClaimCodes then takes over every player display with it (PinNode_ShowPairingCode)
+boolean PinNodeCtrl_ClaimIsPairing();
+
+// A short pip at a volume level (RPU's 0-10), so a volume change is heard: the library plays it when
+// the app changes a volume setting; a game may call it from its own volume adjustment. PinNode 400 only
+// (its player makes the tone); elsewhere it does nothing.
+void PinNode_VolumePip(byte level);
+
+// SOUND_PREVIEW answers (SOUND_STATE 0x3A): a file from the card played on the machine from the app
+#define PINNODE_PREVIEW_PLAYING      0
+#define PINNODE_PREVIEW_STOPPED      1
+#define PINNODE_PREVIEW_BAD_NAME     2
+#define PINNODE_PREVIEW_NOT_NOW      3   // a game, or the card is busy with files
+#define PINNODE_PREVIEW_UNSUPPORTED  4   // no player of ours on this board
+#define PINNODE_PREVIEW_ENDED        5
+#define PINNODE_PREVIEW_NO_FILE      6   // not on the card, or not a WAV it plays
+
+// A line for the developer's log (SPEC-dev-flash §10): over the link to the node, which keeps the
+// recent lines for a paired computer (`pinnode monitor`, the Arduino Serial Monitor on a network
+// port). printf-style; long lines are split. The link is slow: at most PINNODE_LOG_PER_S lines a
+// second get through, the rest are counted and the node is told how many were dropped.
+#ifndef PINNODE_LOG_PER_S
+#define PINNODE_LOG_PER_S 10
+#endif
+void PinNode_Log(const char *fmt, ...);
 
 // Achievements (ACH 0x25) and stats (STAT 0x26), keyed by the manifest's achievements[].index and
 // stats[].index (SPEC-node-link §3.1). slot is 1-4. An achievement goes at once (v = optional

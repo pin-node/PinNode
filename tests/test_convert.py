@@ -49,6 +49,7 @@ def test_st2025_upstream():
     assert "PinNode_ClaimCodesStop()" in _func(ino, "InitGamePlay")
     assert "#define PinNodeAppStarts PinNode_AppStartsOn()" in ino                     # app-starts, default On
     assert "PinNodeCtrl_Credits(Credits, FreePlay)" in _func(ino, "loop")      # the game's own name
+    assert "PinNodeCtrl_Scores(CurrentScores, CurrentNumPlayers)" in _func(ino, "loop")   # live scores
     assert "PinNodeCtrl_TakeAppStart(&startReq, PinNodeAppStarts)" in _func(ino, "loop")
     assert "PinNodeCtrl_TakeCreditAdd" not in _func(ino, "loop")         # no AddCredit/MaximumCredits here: noted
     assert "credits from the app" in r.report_md
@@ -84,6 +85,26 @@ def test_example_machine():
     assert coin.index("PinNodeCtrl_Coin") < coin.rindex("return")   # not dead code after return
     assert len(r.manifest["settings"]) > 10                        # from the operator menus
     assert "PinNodeCtrl_PlayerAdded" in _func(ino, "AddPlayer")
+    # app settings apply at once (ReadStoredParameters); no AudioHandler here, so no music fade
+    applied = _func(ino, "PinNodeSettingsApplied")
+    assert "ReadStoredParameters();" in applied and "FadeSound" not in applied
+    assert ", PinNodeSettingsApplied);" in _func(ino, "setup")
+    assert ino.index("static void PinNodeSettingsApplied") < ino.index("void setup")
+
+
+def test_settings_applied_fades_music(tmp_path):
+    # with RPU's AudioHandler (FadeSound), a new music volume fades the music playing instead of
+    # restarting it (the restart popped)
+    d = tmp_path / "ExampleMachineMEGA"
+    d.mkdir()
+    for f in (FIX / "example-machine").glob("*.*"):
+        (d / f.name).write_text(f.read_text())
+    (d / "AudioHandler.h").write_text("class AudioHandler { public:\n"
+                                      "  boolean FadeSound(unsigned short s, int g, int ms, boolean stop);\n};\n")
+    ino = _zip(convert(d)).read("ExampleMachineMEGA/ExampleMachineMEGA.ino").decode()
+    applied = _func(ino, "PinNodeSettingsApplied")
+    assert "byte musicVolumeBefore = MusicVolume;" in applied
+    assert applied.index("ReadStoredParameters();") < applied.index("Audio.FadeSound(Audio.GetBackgroundSong()")
 
 
 def test_refuses_converted_game(tmp_path):

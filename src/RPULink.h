@@ -66,6 +66,7 @@
 #define RPULINK_HELLO                0x42   // proto 2: buildId, manifestHash, version, maxPlayers, settingsCount
 #define RPULINK_HELLO_EXT            0x43   // rulesetId (len-prefixed), always straight after HELLO
 #define RPULINK_NODE_REQUEST         0x46   // op u8: 1 setup window, 2 factory reset, 3 release
+#define RPULINK_CARD_STATUS          0x39   // sdOk u8, tracks u16: PinNode 400, the RP's SD card
 
 // ---- record types, S3 -> Mega ----
 #define RPULINK_AUDIO_STATUS         0x90   // count u8, count x track u16

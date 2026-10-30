@@ -117,6 +117,24 @@ int main() {
   CHECK(count(0x26) == 0);
   PinNodeCtrl_Achievement(1, 3, 42);
   CHECK(last(0x25) && last(0x25)->d[2] == 1 && last(0x25)->d[3] == 3 && i32(last(0x25)->d, 4) == 42);
+  // live scores: on a change at most every 250 ms, at least every 2 s, ball and player from BallStart
+  {
+    unsigned long sc[4] = {1200, 0, 0, 0};
+    size_t m0 = sent.size();
+    PinNodeCtrl_Scores(sc, 1);
+    CHECK(count(0x3C) >= 1 && last(0x3C)->d[2] == 1 && last(0x3C)->d[3] == 1 && last(0x3C)->d[4] == 1 &&
+          i32(last(0x3C)->d, 5) == 1200);
+    int n0 = count(0x3C);
+    sc[0] = 1300; fake_millis += 100; PinNodeCtrl_Scores(sc, 1);
+    CHECK(count(0x3C) == n0);                                   // too soon
+    fake_millis += 200; PinNodeCtrl_Scores(sc, 1);
+    CHECK(count(0x3C) == n0 + 1 && i32(last(0x3C)->d, 5) == 1300);
+    fake_millis += 1000; PinNodeCtrl_Scores(sc, 1);
+    CHECK(count(0x3C) == n0 + 1);                               // no change, not 2 s yet
+    fake_millis += 1100; PinNodeCtrl_Scores(sc, 1);
+    CHECK(count(0x3C) == n0 + 2);                               // the 2 s repeat
+    (void)m0;
+  }
   PinNodeCtrl_BallEnd(1, 1, 5000);
   int stats = 0; bool statsBeforeEnd = true, seenEnd = false;
   for (size_t i = mark; i < sent.size(); i++) {

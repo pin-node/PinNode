@@ -173,6 +173,7 @@ With the UART link, don't use `Serial2` anywhere else: the library owns it.
   boolean inGame = MachineState > MACHINE_STATE_ATTRACT;
   PinNodeCtrl_Mode(inGame ? PINNODE_MODE_GAME : PINNODE_MODE_ATTRACT,  // recommended
                    inGame ? CurrentBallInPlay : 0, inGame ? CurrentPlayer + 1 : 0);
+  PinNodeCtrl_Scores(CurrentScores, CurrentNumPlayers);               // recommended: live scores
   PinNodeCtrl_Credits(Credits, FreePlayMode);                         // recommended
   PinNodeCtrl_Update(CurrentTime, false);                             // required
 ```
@@ -182,6 +183,7 @@ With the UART link, don't use `Serial2` anywhere else: the library owns it.
   nothing is sent.
 - **`Mode`** lets the app show the machine live: in attract, or in a game on ball 2, player 3. It
   also tells the node when the machine is in a game, so it holds off anything that would interrupt one.
+- **`Scores`** shows the scores live on phones at the machine as the game is played.
 - **`Credits`** shows the machine's credits in the app, and hides Start when there are none.
 - **`false`:** RPU Rev 4 / 102 can't be reflashed over the link.
 

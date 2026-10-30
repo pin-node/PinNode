@@ -53,7 +53,7 @@ The ZIP holds:
 It places:
 
 - the include, settings and audit tables;
-- the link and HELLO in `setup()`, and the link, mode and app starts in `loop()`;
+- the link and HELLO in `setup()`, and the link, mode, live scores and app starts in `loop()`;
 - game start, players added, ball start and end, game over;
 - coins and tilts;
 - claim codes in attract;

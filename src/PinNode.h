@@ -41,7 +41,7 @@ struct PinNodeSettingDef {
   uint32_t bitMask;       // PN_FLAGS: the defined bits
 };
 
-#if defined(__cplusplus) && (defined(ARDUINO_ARCH_AVR) || defined(PINNODE_HOST_BUILD))
+#if defined(__cplusplus) && (defined(ARDUINO_ARCH_AVR) || defined(ARDUINO_ARCH_RP2040) || defined(PINNODE_HOST_BUILD))
 #include "RPULink.h"
 #include "PinNodeCtrl.h"
 
@@ -71,6 +71,7 @@ struct PinNodeSettingDef {
 #define RPULink_DataOverruns(...)          (0u)
 #define PinNodeCtrl_Begin(...)             ((void)0)
 #define PinNodeCtrl_SetOtaHandler(...)     ((void)0)
+#define PinNodeCtrl_NoteInitResult(...)    ((void)0)
 #define PinNodeCtrl_DebugTo(...)           ((void)0)
 #define PinNodeCtrl_BuildId(...)           (0ul)
 #define PinNodeCtrl_Update(...)            ((void)0)
@@ -83,6 +84,7 @@ struct PinNodeSettingDef {
 #define PinNodeCtrl_TimeKnown(...)         (false)
 #define PinNodeCtrl_UnixTime(...)          (0ul)
 #define PinNodeCtrl_Mode(...)              ((void)0)
+#define PinNodeCtrl_Scores(...)            ((void)0)
 #define PinNodeCtrl_GameStart(...)         ((void)0)
 #define PinNodeCtrl_PlayerAdded(...)       ((void)0)
 #define PinNodeCtrl_BallStart(...)         ((void)0)
@@ -109,6 +111,9 @@ struct PinNodeSettingDef {
 #define PinNodeCtrl_AuditsChanged(...)     ((void)0)
 #define PinNodeCtrl_ClearAudits(...)       (0L)
 #define PinNodeCtrl_ClaimCode(...)         (false)
+#define PinNodeCtrl_ClaimIsPairing()       (false)
+#define PinNode_VolumePip(...)             ((void)0)
+#define PinNode_Log(...)                   ((void)0)
 #define PinNodeCtrl_Achievement(...)       ((void)0)
 #define PinNodeCtrl_Stat(...)              ((void)0)
 #define PinNodeCtrl_Actions(...)           ((void)0)
@@ -152,7 +157,7 @@ inline bool PinNode_ClaimCodesShowing() {
   return false;
 }
 
-struct PinNodeClaimShow { byte lampsOn, owned; const byte *lamps; };
+struct PinNodeClaimShow { byte lampsOn, owned; const byte *lamps; bool pairing; };
 #ifdef RPU_NUMBER_OF_PLAYER_DISPLAYS
 #define PINNODE_PLAYER_DISPLAYS RPU_NUMBER_OF_PLAYER_DISPLAYS
 #else
@@ -161,11 +166,54 @@ struct PinNodeClaimShow { byte lampsOn, owned; const byte *lamps; };
 
 inline PinNodeClaimShow &PinNode_ClaimShowState() { static PinNodeClaimShow s; return s; }
 
+#ifndef RPU_OS_NUM_DIGITS
+#define PINNODE_DIGITS 6
+#else
+#define PINNODE_DIGITS RPU_OS_NUM_DIGITS
+#endif
+#ifndef PINNODE_PAIR_STEP_MS
+#define PINNODE_PAIR_STEP_MS 250UL                   // one digit typed in
+#endif
+
+// A pairing code (the owner pairing a computer at the machine) takes over every player display: the
+// code types in from the left a digit at a time, one display after another, holds 3 s, blanks, again.
+// Numeric (BCD) displays can show digits only, so there's no text.
+inline byte PinNode_ShowPairingCode(unsigned long now, unsigned long code) {
+  const unsigned long cycle = 6 * PINNODE_PAIR_STEP_MS + 3000UL + 600UL;
+  byte drawn = 0;
+  for (byte p = 0; p < 4 && p < PINNODE_PLAYER_DISPLAYS; p++) {
+    unsigned long t = (now + cycle - p * 2 * PINNODE_PAIR_STEP_MS) % cycle;   // each display a little later
+    byte shown = t >= 6 * PINNODE_PAIR_STEP_MS + 3000UL ? 0 : (byte)(t / PINNODE_PAIR_STEP_MS + 1);
+    if (shown > 6) shown = 6;
+    unsigned long v = code;
+    for (byte k = shown; k < 6; k++) v /= 10;                       // the first `shown` digits
+    for (byte k = shown; k < PINNODE_DIGITS; k++) v *= 10;           // moved to the left of the display
+    RPU_SetDisplay(p, v, false, PINNODE_DIGITS);
+    RPU_SetDisplayBlank(p, (byte)((1 << shown) - 1));                // bit 0 is the leftmost digit
+    drawn |= 1 << p;
+  }
+  RPU_SetDisplayBlank(4, 0x00);                                      // credits / ball in play: off
+  return drawn;
+}
+
 inline byte PinNode_ShowClaimCodes(unsigned long now, const unsigned long *scores,
                                    const byte *playerUpLamps = 0) {
   PinNodeClaimShow &st = PinNode_ClaimShowState();
   byte &lampsOn = st.lampsOn, &owned = st.owned;
   st.lamps = playerUpLamps;
+  {
+    unsigned long code;
+    if (PinNodeCtrl_ClaimIsPairing() && PinNodeCtrl_ClaimCode(1, &code)) {
+      owned = PinNode_ShowPairingCode(now, code);
+      st.pairing = true;
+      return owned;
+    }
+    if (st.pairing) {                                // pairing over: the scores come back below
+      st.pairing = false;
+      for (byte p = 0; p < 4 && p < PINNODE_PLAYER_DISPLAYS; p++) RPU_SetDisplay(p, scores[p], true, 2);
+      owned = 0;
+    }
+  }
   byte drawn = 0;
   bool codeTurn = (now % (PINNODE_CLAIM_CODE_MS + PINNODE_CLAIM_SCORE_MS)) < PINNODE_CLAIM_CODE_MS;
   bool lit = (now % 600) < 450;                      // the code blinks: 450 ms on, 150 ms off
@@ -553,6 +601,7 @@ inline unsigned long PinNode_BootOptions(unsigned long options) {
 }
 
 inline void PinNode_BootChosen(unsigned long initResult) {
+  PinNodeCtrl_NoteInitResult(initResult);
   // the original was chosen but this game booted: Credit/Reset held at power-on, the local way back
   if (PinNodeCtrl_OriginalChosen() && !(initResult & RPU_RET_ORIGINAL_CODE_REQUESTED)) PinNodeCtrl_SetBootTarget(0);
 }

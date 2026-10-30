@@ -30,6 +30,7 @@ static PinNodeActionRequest pend;
 static byte lastResult = 0xFF;
 boolean PinNodeCtrl_TakeAction(PinNodeActionRequest *r) { if (!pending) return false; pending = false; *r = pend; return true; }
 void PinNodeCtrl_ActionResult(uint16_t, byte, byte result, long, byte) { lastResult = result; }
+void PinNodeCtrl_NoteInitResult(unsigned long) {}   // PinNode_BootChosen reports RPU's start-up result (0.3.17)
 void PinNodeCtrl_Actions(const PinNodeAction *, byte) {}
 void PinNodeCtrl_SwitchEvent(byte, boolean) {}
 long PinNodeCtrl_ClearAudits() { return 0; }
