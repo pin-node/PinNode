@@ -156,13 +156,26 @@ static boolean startPending = false;
 static unsigned long startAtMs;
 
 // ------------------------------------------------------------------ app settings
+// The settings and audit tables are in RAM (PinNodeCtrl_Settings / _Audits) or in flash (the _P
+// calls, for PROGMEM tables: on the Mega a RAM table costs 19 bytes a setting). Read one entry at a time.
+#if !defined(__AVR__) && !defined(memcpy_P)
+#define memcpy_P memcpy
+#endif
 static const PinNodeSetting *setTable = NULL;
 static byte setCount = 0;
+static boolean setInFlash = false;
 static void (*setApplied)(void) = NULL;
 static boolean gameOpen = false;           // between GameStart and GameEnd
 
+static PinNodeSetting SettingAt(byte idx) {
+  PinNodeSetting st;
+  if (setInFlash) memcpy_P(&st, &setTable[idx], sizeof st);
+  else st = setTable[idx];
+  return st;
+}
+
 static long SettingRead(byte idx) {
-  const PinNodeSetting &st = setTable[idx];
+  const PinNodeSetting st = SettingAt(idx);
   long v = st.size == 4 ? (long)EepromReadUL(st.eeprom) : (long)EEPROM.read(st.eeprom);
   // RPU games read flag bytes as (byte & 1), so unprogrammed 0xFF means on: report what the game uses
   if (st.size == 1 && st.minValue == 0 && st.maxValue == 1) v &= 1;
@@ -188,7 +201,13 @@ static void SendSettingsReport() {
 void PinNodeCtrl_Settings(const PinNodeSetting *table, byte count, void (*applied)(void)) {
   setTable = table;
   setCount = count;
+  setInFlash = false;
   setApplied = applied;
+}
+
+void PinNodeCtrl_SettingsP(const PinNodeSetting *table, byte count, void (*applied)(void)) {
+  PinNodeCtrl_Settings(table, count, applied);
+  setInFlash = true;
 }
 
 void PinNodeCtrl_SettingsChanged() { SendSettingsReport(); }
@@ -197,6 +216,19 @@ void PinNodeCtrl_SettingsChanged() { SendSettingsReport(); }
 
 static const PinNodeAudit *audTable = NULL;
 static byte audCount = 0;
+static boolean audInFlash = false;
+
+static PinNodeAudit AuditAt(byte idx) {
+  PinNodeAudit a;
+  if (audInFlash) memcpy_P(&a, &audTable[idx], sizeof a);
+  else a = audTable[idx];
+  return a;
+}
+
+static unsigned long AuditRead(byte idx) {
+  const PinNodeAudit a = AuditAt(idx);
+  return a.size == 4 ? EepromReadUL(a.eeprom) : EEPROM.read(a.eeprom);
+}
 static unsigned long lastAuditMs = 0;
 static unsigned long auditAtMs = 0;        // 0 = none: a snapshot due at this time
 #define PINNODE_AUDIT_PERIOD_MS  (24UL * 60UL * 60UL * 1000UL)
@@ -204,6 +236,12 @@ static unsigned long auditAtMs = 0;        // 0 = none: a snapshot due at this t
 void PinNodeCtrl_Audits(const PinNodeAudit *table, byte count) {
   audTable = table;
   audCount = count;
+  audInFlash = false;
+}
+
+void PinNodeCtrl_AuditsP(const PinNodeAudit *table, byte count) {
+  PinNodeCtrl_Audits(table, count);
+  audInFlash = true;
 }
 
 void PinNodeCtrl_AuditsChanged() { auditPending = true; }
@@ -216,10 +254,8 @@ static boolean SendAuditSnapshot() {
     d[0] = start;
     d[1] = n;
     for (byte i = 0; i < n; i++) {
-      const PinNodeAudit &a = audTable[start + i];
-      unsigned long v = a.size == 4 ? EepromReadUL(a.eeprom) : EEPROM.read(a.eeprom);
       d[2 + 5 * i] = start + i;
-      put32s(d + 3 + 5 * i, (long)v);
+      put32s(d + 3 + 5 * i, (long)AuditRead(start + i));
     }
     if (!RPULink_Queue(0x2D, d, 2 + 5 * n)) return false;
   }
@@ -230,11 +266,12 @@ static boolean SendAuditSnapshot() {
 // then each registered audit goes to 0. Returns the first audit's value before (total plays).
 long PinNodeCtrl_ClearAudits() {
   long before = 0;
-  if (audCount) before = audTable[0].size == 4 ? (long)EepromReadUL(audTable[0].eeprom) : (long)EEPROM.read(audTable[0].eeprom);
+  if (audCount) before = (long)AuditRead(0);
   SendAuditSnapshot();
   for (byte i = 0; i < audCount; i++) {
-    if (audTable[i].size == 4) EepromWriteUL(audTable[i].eeprom, 0);
-    else EEPROM.update(audTable[i].eeprom, 0);
+    const PinNodeAudit a = AuditAt(i);
+    if (a.size == 4) EepromWriteUL(a.eeprom, 0);
+    else EEPROM.update(a.eeprom, 0);
   }
   auditPending = true;
   return before;
@@ -260,7 +297,7 @@ static boolean settingsLocked = false;    // SETTINGS_LOCK; RAM only (the node r
 
 boolean PinNodeCtrl_SettingsLocked() { return settingsLocked; }
 boolean PinNodeCtrl_SettingLocked(byte index) {
-  return settingsLocked && index < setCount && setTable[index].difficulty;
+  return settingsLocked && index < setCount && SettingAt(index).difficulty;
 }
 
 // A volume changed from the app: the player plays a short pip at the new level, as the operator menu's
@@ -325,14 +362,14 @@ static void SettingSet(const byte *d, byte len) {
   long v = (long)((unsigned long)d[3] | ((unsigned long)d[4] << 8) | ((unsigned long)d[5] << 16) | ((unsigned long)d[6] << 24));
   byte source = len >= 8 ? d[7] : 2;
   byte result = PINNODE_SETTING_OK;
+  PinNodeSetting st = {};
+  if (idx < setCount) st = SettingAt(idx);
   if (idx >= setCount) result = PINNODE_SETTING_UNKNOWN;
-  else if (v < setTable[idx].minValue || v > setTable[idx].maxValue ||
-           (setTable[idx].step > 0 && (v - setTable[idx].minValue) % setTable[idx].step != 0))
+  else if (v < st.minValue || v > st.maxValue || (st.step > 0 && (v - st.minValue) % st.step != 0))
     result = PINNODE_SETTING_OUT_OF_RANGE;
-  else if (settingsLocked && setTable[idx].difficulty) result = PINNODE_SETTING_LOCKED;
-  else if (!setTable[idx].liveSafe && gameOpen) result = PINNODE_SETTING_NOT_LIVE;
+  else if (settingsLocked && st.difficulty) result = PINNODE_SETTING_LOCKED;
+  else if (!st.liveSafe && gameOpen) result = PINNODE_SETTING_NOT_LIVE;
   else {
-    const PinNodeSetting &st = setTable[idx];
     unsigned long stored = (unsigned long)((v + (long)st.scale / 2) / (long)st.scale);
     if (st.size == 4) EepromWriteUL(st.eeprom, stored);
     else EEPROM.update(st.eeprom, (byte)stored);
@@ -664,7 +701,11 @@ static void put32(byte *p, uint32_t v) { for (byte i = 0; i < 4; i++) p[i] = (by
 
 // STAT is coalesced per (slot, stat, op) in RAM until BALL_END, GAME_END or 500 ms
 // (SPEC-node-link §5), so a bumper hit costs a RAM add, not a record.
+#if defined(__AVR__)
+#define PINNODE_STAT_SLOTS     6     // the Mega's 8 KB: a full table sends its oldest early
+#else
 #define PINNODE_STAT_SLOTS     12
+#endif
 #define PINNODE_STAT_HOLD_MS   500
 struct PendingStat { byte slot, stat, op, used; long v; unsigned long firstMs; };
 static PendingStat pendStat[PINNODE_STAT_SLOTS];
@@ -754,6 +795,10 @@ void PinNodeCtrl_Credits(byte credits, boolean freePlay) {
   }
 }
 
+static void SidecarClear();                   // Sidecar (below)
+static void SidecarResync();
+static void SidecarTick(unsigned long now);
+
 void PinNodeCtrl_GameStart(byte credits, boolean freePlay) {
   gameCounter += 1;
   EEPROM.update(PINNODE_EEPROM_GAME_COUNTER, (byte)gameCounter);
@@ -763,6 +808,7 @@ void PinNodeCtrl_GameStart(byte credits, boolean freePlay) {
   openSlot = openBall = 0;                     // no ball yet (live scores wait for BallStart)
   for (byte i = 0; i < PINNODE_STAT_SLOTS; i++) pendStat[i].used = 0;
   for (byte i = 0; i < 4; i++) claimCode[i] = 0;   // a new game ends the last one's claim window
+  SidecarClear();                              // the node clears its own at GAME_START too
   gameStartMs = millis();
   byte d[4];
   put16(d, gameCounter);
@@ -866,6 +912,159 @@ void PinNodeCtrl_Tilt(byte slot, byte kind) {
   d[3] = kind;
   RPULink_Queue(0x29, d, 4);
 }
+
+// ------------------------------------------------------------------ Sidecar (PinNode 400)
+
+#if defined(ARDUINO_ARCH_RP2040) || defined(PINNODE_HOST_BUILD)
+// The lowest priority on the link: a Sidecar record is only queued while this many bytes stay free for
+// the game's own records. States and timers wait in their tables (newest value) until there's room;
+// an event that finds no room is dropped (counted).
+#ifndef PINNODE_SIDECAR_STATES
+#define PINNODE_SIDECAR_STATES   256
+#endif
+#ifndef PINNODE_SIDECAR_TIMERS
+#define PINNODE_SIDECAR_TIMERS   32
+#endif
+#define PINNODE_SIDECAR_RESERVE  96
+#define PINNODE_SIDECAR_FIRST_RESERVED_KEY  240
+#define PINNODE_SIDECAR_FIRST_RESERVED_CODE 0xFF00
+#define PINNODE_SIDECAR_STATES_PER_RECORD   9
+struct SidecarState { byte slot, key, used, pending; long value; };
+struct SidecarTimer { byte slot, key, used, pending, op; unsigned long left, total, atMs; };
+static SidecarState scState[PINNODE_SIDECAR_STATES];
+static SidecarTimer scTimer[PINNODE_SIDECAR_TIMERS];
+static void (*scResync)(void) = NULL;
+static unsigned int scDropped = 0;
+static boolean scAny = false;                 // anything in the tables (skip the scans when not)
+
+static boolean SidecarRoom(byte len) { return RPULink_QueueFree() >= (unsigned int)(PINNODE_SIDECAR_RESERVE + 2 + len); }
+
+static void SidecarClear() {
+  for (unsigned int i = 0; i < PINNODE_SIDECAR_STATES; i++) scState[i].used = 0;
+  for (byte i = 0; i < PINNODE_SIDECAR_TIMERS; i++) scTimer[i].used = 0;
+  scAny = false;
+}
+
+// the node may have lost what it kept: everything shown goes again
+static void SidecarResync() {
+  for (unsigned int i = 0; i < PINNODE_SIDECAR_STATES; i++) if (scState[i].used) scState[i].pending = 1;
+  for (byte i = 0; i < PINNODE_SIDECAR_TIMERS; i++) if (scTimer[i].used) scTimer[i].pending = 1;
+  if (scResync && gameOpen) scResync();
+}
+
+void PinNodeCtrl_SetSidecarResync(void (*fn)(void)) { scResync = fn; }
+unsigned int PinNodeCtrl_SidecarDropped() { return scDropped; }
+
+void PinNodeCtrl_Sidecar(byte slot, uint16_t code, long value) {
+  if (!gameOpen || code >= PINNODE_SIDECAR_FIRST_RESERVED_CODE) return;
+  byte d[9];
+  put16(d, gameCounter);
+  d[2] = slot;
+  put16(d + 3, code);
+  put32(d + 5, (uint32_t)value);
+  if (!SidecarRoom(sizeof d) || !RPULink_Queue(RPULINK_SIDECAR_EVENT, d, sizeof d)) scDropped++;
+}
+
+void PinNodeCtrl_SidecarState(byte slot, byte key, long value) {
+  if (!gameOpen || key >= PINNODE_SIDECAR_FIRST_RESERVED_KEY) return;
+  int freeIdx = -1, spare = -1;
+  for (unsigned int i = 0; i < PINNODE_SIDECAR_STATES; i++) {
+    SidecarState &s = scState[i];
+    if (!s.used) { if (freeIdx < 0) freeIdx = i; continue; }
+    if (s.slot == slot && s.key == key) {
+      if (s.value == value) return;             // already sent, or already waiting to be
+      s.value = value;
+      s.pending = 1;
+      return;
+    }
+    if (!s.pending && spare < 0) spare = i;     // sent and settled: can be forgotten if the table is full
+  }
+  if (freeIdx < 0) freeIdx = spare;             // forgetting one only means it can't be re-sent at a resync
+  if (freeIdx < 0) { scDropped++; return; }     // every entry is still waiting to go
+  SidecarState &s = scState[freeIdx];
+  s.slot = slot; s.key = key; s.value = value; s.used = 1; s.pending = 1;
+  scAny = true;
+}
+
+static void SidecarSetTimer(byte slot, byte key, byte op, unsigned long msLeft, unsigned long msTotal, boolean keepTotal) {
+  if (!gameOpen || key >= PINNODE_SIDECAR_FIRST_RESERVED_KEY) return;
+  int idx = -1, freeIdx = -1;
+  for (byte i = 0; i < PINNODE_SIDECAR_TIMERS; i++) {
+    if (scTimer[i].used && scTimer[i].slot == slot && scTimer[i].key == key) { idx = i; break; }
+    if (!scTimer[i].used && freeIdx < 0) freeIdx = i;
+  }
+  if (idx < 0) {
+    if (op == PINNODE_SC_TIMER_STOPPED) return;   // never shown: nothing to stop
+    if (freeIdx < 0) { scDropped++; return; }
+    idx = freeIdx;
+    scTimer[idx].total = 0;
+  }
+  SidecarTimer &t = scTimer[idx];
+  t.slot = slot; t.key = key; t.op = op; t.left = msLeft; t.atMs = millis();
+  if (!keepTotal) t.total = msTotal;
+  t.used = 1; t.pending = 1;
+  scAny = true;
+}
+
+void PinNodeCtrl_SidecarTimer(byte slot, byte key, unsigned long msLeft, unsigned long msTotal) {
+  SidecarSetTimer(slot, key, PINNODE_SC_TIMER_RUNNING, msLeft, msTotal, false);
+}
+void PinNodeCtrl_SidecarTimerPause(byte slot, byte key, unsigned long msLeft) {
+  SidecarSetTimer(slot, key, PINNODE_SC_TIMER_PAUSED, msLeft, 0, true);
+}
+void PinNodeCtrl_SidecarTimerStop(byte slot, byte key) {
+  SidecarSetTimer(slot, key, PINNODE_SC_TIMER_STOPPED, 0, 0, true);
+}
+
+// From Update: timers first (a countdown that starts late looks wrong), then states, a record per slot
+static void SidecarTick(unsigned long now) {
+  if (!scAny) return;
+  for (byte i = 0; i < PINNODE_SIDECAR_TIMERS; i++) {
+    SidecarTimer &t = scTimer[i];
+    if (!t.used || !t.pending) continue;
+    if (!SidecarRoom(13)) return;
+    unsigned long left = t.left;
+    if (t.op == PINNODE_SC_TIMER_RUNNING) {
+      unsigned long ran = now - t.atMs;
+      left = ran >= left ? 0 : left - ran;
+    }
+    byte d[13];
+    put16(d, gameCounter);
+    d[2] = t.slot; d[3] = t.key; d[4] = t.op;
+    put32(d + 5, left);
+    put32(d + 9, t.total);
+    if (!RPULink_Queue(RPULINK_SIDECAR_TIMER, d, sizeof d)) return;
+    t.pending = 0;
+    if (t.op == PINNODE_SC_TIMER_STOPPED) t.used = 0;   // gone from the phone: nothing to resync
+  }
+  for (;;) {
+    int first = -1;
+    for (unsigned int i = 0; i < PINNODE_SIDECAR_STATES && first < 0; i++)
+      if (scState[i].used && scState[i].pending) first = i;
+    if (first < 0) return;
+    byte slot = scState[first].slot;
+    byte d[4 + 5 * PINNODE_SIDECAR_STATES_PER_RECORD];
+    byte n = 0;
+    int taken[PINNODE_SIDECAR_STATES_PER_RECORD];
+    for (unsigned int i = first; i < PINNODE_SIDECAR_STATES && n < PINNODE_SIDECAR_STATES_PER_RECORD; i++) {
+      SidecarState &s = scState[i];
+      if (!s.used || !s.pending || s.slot != slot) continue;
+      d[4 + 5 * n] = s.key;
+      put32(d + 5 + 5 * n, (uint32_t)s.value);
+      taken[n++] = i;
+    }
+    put16(d, gameCounter);
+    d[2] = slot; d[3] = n;
+    byte len = 4 + 5 * n;
+    if (!SidecarRoom(len) || !RPULink_Queue(RPULINK_SIDECAR_STATE, d, len)) return;
+    for (byte k = 0; k < n; k++) scState[taken[k]].pending = 0;
+  }
+}
+#else
+static void SidecarClear() {}
+static void SidecarResync() {}
+static void SidecarTick(unsigned long) {}
+#endif
 
 void PinNodeCtrl_Begin(const char *version, const char *rulesetId, const byte *manifestHash,
                        byte maxPlayers, byte settingsCount, uint16_t hwRev) {
@@ -1127,10 +1326,12 @@ void PinNodeCtrl_Update(unsigned long now, boolean otaAllowed) {
     SendHello();
     lastMode = 0xFF;                        // and repeat the mode
     lastCredits = 0xFF;                     // and the credits
+    SidecarResync();                        // and everything shown on the phone
 #if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
     CardStatusTick(true);
 #endif
   }
+  if (up) SidecarTick(now);
 #if defined(ARDUINO_ARCH_RP2040) && !defined(PINNODE_HOST_BUILD)
   static unsigned long lastCardMs;
   if (up && now - lastCardMs > 2000) {

@@ -1,5 +1,20 @@
 # Changes
 
+## 0.3.21
+
+Less RAM on the Mega: about 720 bytes for a converted game (FP25: 84% to 76%).
+
+- `PinNodeCtrl_SettingsP` / `PinNodeCtrl_AuditsP`: the settings and audit tables in flash (`PROGMEM`).
+  A setting kept in RAM cost 19 bytes. `PinNodeCtrl_Settings` / `_Audits` still take RAM tables.
+- Mega: the link's receive buffer is 128 bytes (was 256). The node only answers a frame, and the
+  buffer is drained before each one is sent, so one answer at most waits there.
+- Mega: the audio queue is 32 bytes (4 sounds; was 96), and 6 stats wait to be coalesced (was 12;
+  a full table sends its oldest early). The 400 keeps 96 and 12.
+- Converter: tables in flash, registered with the `_P` calls. Converted games need 0.3.21. The
+  converter's version now matches the library's.
+
+A game rebuilt with 0.3.21 without changing its tables saves about 260 bytes.
+
 ## 0.3.20
 
 - `PinNodeCtrl_Scores` waits for the game's first `BallStart`: no live score with player 0, ball 0 as a

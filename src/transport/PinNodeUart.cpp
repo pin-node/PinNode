@@ -12,7 +12,10 @@
 // Own USART2 driver, not HardwareSerial: Serial2's 63-byte receive ring can't hold one 64-byte
 // frame if the game loop is slow, and its blocking write would stall the loop. So never use
 // Serial2 in a sketch with this link.
-#define LINK_RX_RING      256               // 4 frames
+// The node only ever answers a frame, and UartPoll drains before each one it sends, so at most
+// one 64-byte answer waits here: two frames is enough.
+#define LINK_RX_RING      128               // 2 frames (a power of two: the indices wrap by mask)
+#define LINK_RX_MASK      (LINK_RX_RING - 1)
 #define LINK_TX_RING      128               // 2 frames
 static volatile byte uRx[LINK_RX_RING];
 static volatile byte uRxHead = 0, uRxTail = 0;
@@ -25,7 +28,7 @@ ISR(USART2_RX_vect) {
   if (status & _BV(FE2)) rpuLinkFramingErrors++;    // bad stop bit: a corrupted byte (signal, noise)
   if (status & _BV(DOR2)) rpuLinkDataOverruns++;    // bytes lost before this one: the ISR ran too late
   rpuLinkRxBytes++;
-  byte next = (byte)(uRxHead + 1);          // 256-entry ring: byte arithmetic wraps for free
+  byte next = (byte)((uRxHead + 1) & LINK_RX_MASK);
   if (next == uRxTail) { rpuLinkRxOverruns++; return; }
   uRx[uRxHead] = b;
   uRxHead = next;
@@ -58,9 +61,9 @@ static boolean UartWrite(const byte *d, byte n) {
   return true;
 }
 
-static byte UartAvailable() { return (byte)(uRxHead - uRxTail); }
-static byte UartPeek(byte i) { return uRx[(byte)(uRxTail + i)]; }
-static void UartDrop(byte n) { uRxTail = (byte)(uRxTail + n); }
+static byte UartAvailable() { return (byte)((uRxHead - uRxTail) & LINK_RX_MASK); }
+static byte UartPeek(byte i) { return uRx[(byte)((uRxTail + i) & LINK_RX_MASK)]; }
+static void UartDrop(byte n) { uRxTail = (byte)((uRxTail + n) & LINK_RX_MASK); }
 
 // whatever has arrived: find frames (magic, version, CRC), resyncing a byte at a time, so the
 // ESP32's boot chatter and any line noise are skipped

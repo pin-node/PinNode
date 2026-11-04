@@ -174,6 +174,8 @@ struct PinNodeSetting {
   long step;                  // app units; 0 = any value in range
 };
 void PinNodeCtrl_Settings(const PinNodeSetting *table, byte count, void (*applied)(void));
+// The same for a table in flash (const PinNodeSetting MyTable[] PROGMEM = {...}): saves 19 bytes of RAM a setting
+void PinNodeCtrl_SettingsP(const PinNodeSetting *table, byte count, void (*applied)(void));
 void PinNodeCtrl_SettingsChanged();   // call after the operator menu: re-report (the node diffs)
 // SETTINGS_LOCK (0xA7, a tournament): difficulty settings can't change, from the app or from the
 // operator menu. The game's menu should check PinNodeCtrl_SettingLocked before saving an edit.
@@ -188,6 +190,7 @@ struct PinNodeAudit {
   byte size;                  // 1 = byte, 4 = unsigned long (unsigned long, little-endian)
 };
 void PinNodeCtrl_Audits(const PinNodeAudit *table, byte count);
+void PinNodeCtrl_AuditsP(const PinNodeAudit *table, byte count);   // a table in flash (PROGMEM)
 void PinNodeCtrl_AuditsChanged();     // call after the operator menu (audits may have been reset)
 long PinNodeCtrl_ClearAudits();       // send them, then zero every registered audit; the first one's value before
 
@@ -290,5 +293,38 @@ void PinNodeCtrl_SwitchEvent(byte sw, boolean closed);   // during a switch test
 void PinNodeCtrl_StartResult(uint16_t reqId, byte result, byte slot);
 void PinNodeCtrl_Tilt(byte slot, byte kind);
 uint16_t PinNodeCtrl_GameCounter();
+
+// Sidecar (PHASE0-2026-11-02-sidecar): the game drives a screen on the phone. Codes, keys and values
+// mean whatever the game's pack says; the manifest's sidecar block names them (PinNodeGame.h has
+// SC_STATE_*, SC_TIMER_*, SC_EVENT_*). slot 1-4 is a player, 0 the whole game. Only during a game:
+// outside one the calls do nothing. Each call enqueues and returns.
+// - An event goes once, now (lost if no phone is connected). Codes 0xFF00-0xFFFF are PinNode's.
+// - A state is sent when it changes; changes before the next send go as one, with the newest value.
+// - A timer is counted down on the phone: msLeft from now, msTotal its full length (0 = not given).
+// Keys 240-255 are PinNode's. The library keeps every state and timer it has sent, and sends them all
+// again when the node may have lost them (the link came back with HELLO), so games needn't. The resync
+// hook, if set, runs then too, for games that keep their own idea of what's shown.
+// Sidecar runs on the PinNode 400 (RP2350). On other boards the calls compile to nothing, so one game
+// source builds for every board.
+#define PINNODE_SC_TIMER_STOPPED 0
+#define PINNODE_SC_TIMER_RUNNING 1
+#define PINNODE_SC_TIMER_PAUSED  2
+#if defined(ARDUINO_ARCH_RP2040) || defined(PINNODE_HOST_BUILD)
+void PinNodeCtrl_Sidecar(byte slot, uint16_t code, long value = 0);
+void PinNodeCtrl_SidecarState(byte slot, byte key, long value);
+void PinNodeCtrl_SidecarTimer(byte slot, byte key, unsigned long msLeft, unsigned long msTotal = 0);
+void PinNodeCtrl_SidecarTimerPause(byte slot, byte key, unsigned long msLeft);
+void PinNodeCtrl_SidecarTimerStop(byte slot, byte key);
+void PinNodeCtrl_SetSidecarResync(void (*fn)(void));
+unsigned int PinNodeCtrl_SidecarDropped();   // events not sent (the link queue was busy), states not kept (table full)
+#else
+inline void PinNodeCtrl_Sidecar(byte, uint16_t, long = 0) {}
+inline void PinNodeCtrl_SidecarState(byte, byte, long) {}
+inline void PinNodeCtrl_SidecarTimer(byte, byte, unsigned long, unsigned long = 0) {}
+inline void PinNodeCtrl_SidecarTimerPause(byte, byte, unsigned long) {}
+inline void PinNodeCtrl_SidecarTimerStop(byte, byte) {}
+inline void PinNodeCtrl_SetSidecarResync(void (*)(void)) {}
+inline unsigned int PinNodeCtrl_SidecarDropped() { return 0; }
+#endif
 
 #endif

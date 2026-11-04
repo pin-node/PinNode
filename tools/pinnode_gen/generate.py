@@ -48,6 +48,20 @@ def _enum_block(title: str, prefix: str, entries: list[dict]) -> list[str]:
     return out
 
 
+def _numbered_block(title: str, prefix: str, entries: list[dict], field: str, ctype: str) -> list[str]:
+    live = [e for e in entries if not e.get("retired")]
+    fmt = (lambda n: f"0x{n:04X}") if field == "code" else str
+    out = [f"// no {title}"]
+    if live:
+        out = [f"enum : {ctype} {{   // {title}"]
+        for e in sorted(live, key=lambda e: e[field]):
+            out.append(f"  {_const(prefix, e['id'])} = {fmt(e[field])},")
+        out.append("};")
+    for e in sorted((e for e in entries if e.get("retired")), key=lambda e: e[field]):
+        out.append(f"// retired: {_const(prefix, e['id'])} = {fmt(e[field])} ({field} reserved forever)")
+    return out
+
+
 def generate(m: dict, source_name: str = "pinnode.game.json") -> str:
     r = m["ruleset"]
     settings = sorted([s for s in m.get("settings", []) if not s.get("retired")],
@@ -76,6 +90,16 @@ def generate(m: dict, source_name: str = "pinnode.game.json") -> str:
         # Operator actions (SPEC-operator-actions): only when declared, so the
         # headers of games without actions don't change.
         lines += [*_enum_block("actions", "ACT_", m["actions"]), ""]
+    if m.get("sidecar"):
+        # Sidecar (PHASE0-2026-11-02-sidecar): the numbers the game passes to the PinNodeCtrl_Sidecar*
+        # calls. Only when declared, so other games' headers don't change.
+        # sidecar-tools/sidecar_gen.py's SidecarIds.h has the same constants: whichever comes first wins
+        sc = m["sidecar"]
+        lines += ["#ifndef SIDECAR_IDS_H", "#define SIDECAR_IDS_H"]
+        lines += [*_numbered_block("Sidecar states (PinNodeCtrl_SidecarState)", "SC_STATE_", sc.get("states", []), "key", "uint8_t"),
+                  *_numbered_block("Sidecar timers (PinNodeCtrl_SidecarTimer)", "SC_TIMER_", sc.get("timers", []), "key", "uint8_t"),
+                  *_numbered_block("Sidecar events (PinNodeCtrl_Sidecar)", "SC_EVENT_", sc.get("events", []), "code", "uint16_t"),
+                  "#endif", ""]
     for s in settings:
         if s["type"] == "enum":
             vals = ", ".join(str(v["v"]) for v in s["values"])

@@ -37,7 +37,11 @@
 #define RPULINK_TIMEOUT_MS       1000      // no valid frame for this long = link down (a burst of
                                            // lost frames under the RPU OS ISRs is not a link loss)
 #define RPULINK_QUEUE_BYTES      256       // Mega -> S3 record queue (type,len,data...)
-#define RPULINK_AUDIO_QUEUE_BYTES 96        // audio records, sent ahead of everything else
+#if defined(__AVR__)
+#define RPULINK_AUDIO_QUEUE_BYTES 32        // audio records, sent ahead of everything else: 4 sounds
+#else                                       // (a frame takes them every 5 ms; the Mega's RAM is short)
+#define RPULINK_AUDIO_QUEUE_BYTES 96
+#endif
 #define RPULINK_SPI_HZ           2000000UL
 #define RPULINK_DORMANT_AFTER_MS 10000     // no valid frame this long: no node, go quiet
 #define RPULINK_PROBE_MS         2000      // while quiet, one frame this often to find a node
@@ -67,6 +71,9 @@
 #define RPULINK_HELLO_EXT            0x43   // rulesetId (len-prefixed), always straight after HELLO
 #define RPULINK_NODE_REQUEST         0x46   // op u8: 1 setup window, 2 factory reset, 3 release
 #define RPULINK_CARD_STATUS          0x39   // sdOk u8, tracks u16: PinNode 400, the RP's SD card
+#define RPULINK_SIDECAR_EVENT        0x3D   // g u16, slot u8, code u16, value i32 (PinNode 400)
+#define RPULINK_SIDECAR_STATE        0x3E   // g u16, slot u8, n u8, n x (key u8, value i32), n <= 9
+#define RPULINK_SIDECAR_TIMER        0x3F   // g u16, slot u8, key u8, op u8, msLeft u32, msTotal u32
 
 // ---- record types, S3 -> Mega ----
 #define RPULINK_AUDIO_STATUS         0x90   // count u8, count x track u16
@@ -92,6 +99,7 @@ boolean RPULink_QueueText(byte type, const char *text);
 boolean RPULink_IsUp();
 boolean RPULink_IsDormant();                       // no node answering: one probe every 2 s (records still queue)
 boolean RPULink_Pending();                         // records queued or a payload not yet acked by the node
+unsigned int RPULink_QueueFree();                  // bytes free in the PinNode record queue (not audio)
 void RPULink_SetFlag(byte flag, boolean on);
 unsigned int RPULink_DroppedRecords();              // records refused because the queue was full
 unsigned int RPULink_BadFrames();

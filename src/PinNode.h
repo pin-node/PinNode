@@ -104,10 +104,12 @@ struct PinNodeSettingDef {
 #define PinNodeCtrl_CreditResult(...)      ((void)0)
 #define PinNodeCtrl_StartResult(...)       ((void)0)
 #define PinNodeCtrl_Settings(...)          ((void)0)
+#define PinNodeCtrl_SettingsP(...)         ((void)0)
 #define PinNodeCtrl_SettingsChanged(...)   ((void)0)
 #define PinNodeCtrl_SettingsLocked(...)    (false)
 #define PinNodeCtrl_SettingLocked(...)     (false)
 #define PinNodeCtrl_Audits(...)            ((void)0)
+#define PinNodeCtrl_AuditsP(...)           ((void)0)
 #define PinNodeCtrl_AuditsChanged(...)     ((void)0)
 #define PinNodeCtrl_ClearAudits(...)       (0L)
 #define PinNodeCtrl_ClaimCode(...)         (false)
@@ -123,6 +125,13 @@ struct PinNodeSettingDef {
 #define PinNodeCtrl_SwitchEvent(...)       ((void)0)
 #define PinNodeCtrl_Tilt(...)              ((void)0)
 #define PinNodeCtrl_GameCounter(...)       ((uint16_t)0)
+#define PinNodeCtrl_Sidecar(...)           ((void)0)
+#define PinNodeCtrl_SidecarState(...)      ((void)0)
+#define PinNodeCtrl_SidecarTimer(...)      ((void)0)
+#define PinNodeCtrl_SidecarTimerPause(...) ((void)0)
+#define PinNodeCtrl_SidecarTimerStop(...)  ((void)0)
+#define PinNodeCtrl_SetSidecarResync(...)  ((void)0)
+#define PinNodeCtrl_SidecarDropped()       (0u)
 #endif
 #endif
 

@@ -229,6 +229,7 @@ void RPULink_Update(unsigned long now) {
 
 boolean RPULink_IsDormant() { return dormant; }
 boolean RPULink_Pending() { return txRing.used > 0 || (txPayloadLen && peerAck != txSeq); }
+unsigned int RPULink_QueueFree() { return txRing.size - txRing.used; }
 
 
 boolean RPULink_IsUp() {

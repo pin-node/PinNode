@@ -355,15 +355,17 @@ keeps leaderboards fair, and tournaments lock them.
 | `step` | `long` | App units; 0 = any value in range |
 
 ```cpp
-const PinNodeSetting MySettings[] = {
+const PinNodeSetting MySettings[] PROGMEM = {
   // eeprom                     size min max scale liveSafe difficulty step
   { EEPROM_BALLS_OVERRIDE_BYTE,  1,   3,  10,  1,   false,   true,      0 },   // SET_BALLS_PER_GAME
   { EEPROM_MUSIC_VOLUME_BYTE,    1,   0,  10,  1,   true,    false,     0 },   // SET_MUSIC_VOLUME
 };
 ```
 
-### `void PinNodeCtrl_Settings(const PinNodeSetting *table, byte count, void (*applied)(void))`
-Before `Begin`. One entry per manifest setting, in index order.
+### `void PinNodeCtrl_SettingsP(const PinNodeSetting *table, byte count, void (*applied)(void))`
+Before `Begin`. One entry per manifest setting, in index order. For a table in flash (`PROGMEM`, as
+above): on the Mega each setting kept in RAM costs 19 bytes. `PinNodeCtrl_Settings`, with the same
+parameters, takes a table without `PROGMEM`.
 
 | Parameter | Type | Meaning |
 |---|---|---|
@@ -391,9 +393,10 @@ locked. Check it in your operator menu before saving an edit.
 | `eeprom` | `unsigned short` | EEPROM address of the counter |
 | `size` | `byte` | 1 or 4 |
 
-### `void PinNodeCtrl_Audits(const PinNodeAudit *table, byte count)`
+### `void PinNodeCtrl_AuditsP(const PinNodeAudit *table, byte count)`
 Before `Begin`. One entry per manifest audit, in index order. Sent after HELLO, each game end,
-every 24 h, and when asked.
+every 24 h, and when asked. For a table in flash (`const PinNodeAudit MyAudits[] PROGMEM = {...}`);
+`PinNodeCtrl_Audits` takes one without `PROGMEM`.
 
 ### `void PinNodeCtrl_AuditsChanged()`
 After your operator menu closes (audits may have been reset).

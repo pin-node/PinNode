@@ -263,6 +263,46 @@
     },
     "sounds": {
       "$ref": "#/$defs/namedList"
+    },
+    "sidecar": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Sidecar (PHASE0-2026-11-02): every state, timer and event the game sends, by number. Names are for the pack, logs and tools; they never change what the library or node does. The screen for phones (a pack) is a separate file, sidecar-pack.json, made by pinnode-gen pack and hosted by the developer; pack.url says where.",
+      "properties": {
+        "states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sidecarState"
+          }
+        },
+        "timers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sidecarTimer"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sidecarEvent"
+          }
+        },
+        "pack": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url"
+          ],
+          "description": "Where phones find the game's pack (sidecar-pack.json), hosted by the developer, never PinNode. Keep it stable (e.g. the GitHub release 'latest' address) so a new pack needs no new manifest. https://, or plain http:// only at a local-network address.",
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https?://",
+              "maxLength": 300
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -637,6 +677,138 @@
           }
         }
       ]
+    },
+    "sidecarScope": {
+      "enum": [
+        "player",
+        "game"
+      ]
+    },
+    "sidecarState": {
+      "type": "object",
+      "required": [
+        "id",
+        "key",
+        "name",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "desc": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "scope": {
+          "$ref": "#/$defs/sidecarScope"
+        },
+        "retired": {
+          "type": "boolean"
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 239
+        },
+        "min": {
+          "type": "integer"
+        },
+        "max": {
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "number",
+            "percent",
+            "flags",
+            "enum"
+          ]
+        },
+        "bits": {
+          "$ref": "#/$defs/namedList"
+        },
+        "values": {
+          "$ref": "#/$defs/namedList"
+        }
+      }
+    },
+    "sidecarTimer": {
+      "type": "object",
+      "required": [
+        "id",
+        "key",
+        "name",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "desc": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "scope": {
+          "$ref": "#/$defs/sidecarScope"
+        },
+        "retired": {
+          "type": "boolean"
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 239
+        }
+      }
+    },
+    "sidecarEvent": {
+      "type": "object",
+      "required": [
+        "id",
+        "code",
+        "name",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "desc": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "scope": {
+          "$ref": "#/$defs/sidecarScope"
+        },
+        "retired": {
+          "type": "boolean"
+        },
+        "code": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65279
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 40
+        }
+      }
     }
   }
 }

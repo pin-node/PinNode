@@ -4,8 +4,11 @@
  * RPULink_BeginSpi().
  *
  * PinNode 400 (RP2350B): the RP is master, the XIAO ESP32-S3 the slave, on
- * SPI0: GPIO34 SCK, GPIO35 MOSI, GPIO36 MISO, GPIO37 CS. The 400 has no UART
- * link, so RPULink_BeginUart() starts this one too: games don't change.
+ * SPI0. 400-J5: GPIO34 SCK, GPIO35 MOSI, GPIO36 MISO, GPIO37 CS, GPIO38 ATTN.
+ * 400-IC: GPIO38 SCK, GPIO35 MOSI, GPIO36 MISO, GPIO37 CS, GPIO39 ATTN (its
+ * GPIO34 is the CPU socket's RESET); RPU Rev 401 says which by defining
+ * PinNode400_Board(). The 400 has no UART link, so RPULink_BeginUart() starts
+ * this one too: games don't change.
  **************************************************************************/
 #if defined(ARDUINO_ARCH_AVR) || defined(ARDUINO_ARCH_RP2040)
 
@@ -18,11 +21,13 @@
 #include "../RPULinkInternal.h"
 
 #if defined(ARDUINO_ARCH_RP2040)
-#define PINNODE_400_SCK   34
 #define PINNODE_400_MOSI  35
 #define PINNODE_400_MISO  36
 #define PINNODE_400_CS    37
-#define PINNODE_400_ATTN  38   // node -> RP: a command is waiting (bulk mode); pulled up (RPU.cpp)
+// RPU Rev 401 (the 400-IC) defines this to return 401; the 400-J5 (Rev 400) doesn't define it
+extern "C" int PinNode400_Board() __attribute__((weak));
+static byte linkSckPin = 34;
+static byte linkAttnPin = 38;   // node -> RP: a command is waiting (bulk mode); pulled up (RPU.cpp)
 static byte linkCsPin = PINNODE_400_CS;
 #else
 static byte linkCsPin = 53;
@@ -154,10 +159,10 @@ static void SpiBulkPump() {
   // pulled up: the RP then exchanges continuously, as before LINK_ATTN.)
   int misses = 0;
   do {
-    if (!digitalRead(PINNODE_400_ATTN)) {
+    if (!digitalRead(linkAttnPin)) {
       unsigned long w = micros();
-      while (!digitalRead(PINNODE_400_ATTN) && micros() - w < 10000) {}
-      if (!digitalRead(PINNODE_400_ATTN) && millis() - bulkLastMs < BULK_KEEPALIVE_MS && !bulkReplyStale) return;
+      while (!digitalRead(linkAttnPin) && micros() - w < 10000) {}
+      if (!digitalRead(linkAttnPin) && millis() - bulkLastMs < BULK_KEEPALIVE_MS && !bulkReplyStale) return;
     }
     BulkReply();
     SPI.beginTransaction(SPISettings(BULK_SPI_HZ, MSBFIRST, SPI_MODE0));
@@ -220,11 +225,12 @@ static const RPULinkTransport spiTransport = {SpiPoll, NULL};
 
 void RPULink_BeginSpi(byte csPin) {
 #if defined(ARDUINO_ARCH_RP2040)
+  if (PinNode400_Board && PinNode400_Board() == 401) { linkSckPin = 38; linkAttnPin = 39; }   // the 400-IC
   linkCsPin = csPin == 53 ? PINNODE_400_CS : csPin;   // 53 is the header's Mega default
-  pinMode(PINNODE_400_ATTN, INPUT_PULLUP);    // high unless the node drives it: never low while the XIAO boots
+  pinMode(linkAttnPin, INPUT_PULLUP);    // high unless the node drives it: never low while the XIAO boots
   pinMode(linkCsPin, OUTPUT);
   digitalWrite(linkCsPin, HIGH);
-  SPI.setSCK(PINNODE_400_SCK);
+  SPI.setSCK(linkSckPin);
   SPI.setTX(PINNODE_400_MOSI);
   SPI.setRX(PINNODE_400_MISO);
   SPI.begin();

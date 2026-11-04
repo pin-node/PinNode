@@ -5,6 +5,11 @@ pinnode-gen: manifest tools for RPU games.
     pinnode-gen check    [pinnode.game.json] [--header PinNodeGame.h] [--previous old.json ...]
     pinnode-gen scan     <repo> [--json draft.json] [--report report.md]
     pinnode-gen convert  <sketch dir> [--machine NAME] [--ruleset-id ID] [-o out.zip]
+    pinnode-gen sidecar  [pinnode.game.json] [--from sidecar.json]   copy the game's Sidecar manifest in
+    pinnode-gen pack     [pinnode.game.json] --tag TAG [--upload] [--verify]   the Sidecar pack for phones
+
+A game that uses Sidecar (the open RPU library) keeps its calls in sidecar.json; its sidecar block in
+pinnode.game.json must be the same. `generate` and `check` say when they differ.
 
 `check` exits 1 on any problem, so it can gate CI (see action.yml).
 """
@@ -17,6 +22,7 @@ import sys
 from pathlib import Path
 
 from . import convert as convert_mod
+from . import pack as pack_mod
 from . import scan as scan_mod
 from .generate import generate
 from .manifest import index_conflicts, validate
@@ -31,9 +37,41 @@ def _load(path: Path) -> dict:
         raise SystemExit(f"pinnode-gen: {path} is not valid JSON: {e}") from None
 
 
+SIDECAR_KEYS = ("states", "timers", "events")
+
+
+def _sidecar_file_problems(manifest_path: Path, m: dict) -> list[str]:
+    """The sidecar block must match the game's sidecar.json (beside the manifest), when there is one."""
+    f = manifest_path.with_name("sidecar.json")
+    if not f.exists():
+        return []
+    want = {k: v for k, v in _load(f).items() if k in SIDECAR_KEYS}
+    have = {k: v for k, v in m.get("sidecar", {}).items() if k in SIDECAR_KEYS}
+    if want != have:
+        return [f"the sidecar block differs from {f.name}: run pinnode-gen sidecar {manifest_path.name}"]
+    return []
+
+
+def cmd_sidecar(a) -> int:
+    m = _load(a.manifest)
+    src = a.source or a.manifest.with_name("sidecar.json")
+    block = dict(m.get("sidecar", {}))
+    block.update({k: v for k, v in _load(src).items() if k in SIDECAR_KEYS})
+    m["sidecar"] = block
+    problems = validate(m)
+    if problems:
+        print(f"pinnode-gen: with {src.name}, {a.manifest} would have problems; not written:", file=sys.stderr)
+        for p in problems:
+            print(f"  - {p}", file=sys.stderr)
+        return 1
+    a.manifest.write_text(json.dumps(m, indent=1, ensure_ascii=False) + "\n")
+    print(f"wrote the sidecar block of {a.manifest} from {src}: then run pinnode-gen generate")
+    return 0
+
+
 def cmd_generate(a) -> int:
     m = _load(a.manifest)
-    problems = validate(m)
+    problems = validate(m) + _sidecar_file_problems(a.manifest, m)
     if problems:
         print(f"pinnode-gen: {a.manifest} has problems, header not written:", file=sys.stderr)
         for p in problems:
@@ -48,7 +86,7 @@ def cmd_generate(a) -> int:
 
 def cmd_check(a) -> int:
     m = _load(a.manifest)
-    problems = validate(m)
+    problems = validate(m) + _sidecar_file_problems(a.manifest, m)
     previous = [_load(p) for p in (a.previous or [])]
     if previous and not problems:
         problems += index_conflicts(previous, m)
@@ -100,6 +138,15 @@ def main(argv=None) -> int:
                        help="add PinNode to an RPU game: a ZIP with the hooks, manifest and report")
     v.add_argument("rest", nargs=argparse.REMAINDER)
     v.set_defaults(fn=lambda a: convert_mod.main(a.rest))
+
+    sc = sub.add_parser("sidecar", help="copy the game's sidecar.json into the manifest's sidecar block")
+    sc.add_argument("manifest", nargs="?", type=Path, default=Path("pinnode.game.json"))
+    sc.add_argument("--from", dest="source", type=Path, help="default: sidecar.json beside the manifest")
+    sc.set_defaults(fn=cmd_sidecar)
+
+    pk = sub.add_parser("pack", help="the Sidecar pack: layout and media, ready for the game's release")
+    pk.add_argument("rest", nargs=argparse.REMAINDER)
+    pk.set_defaults(fn=lambda a: pack_mod.main(a.rest))
 
     a = p.parse_args(argv)
     return a.fn(a)

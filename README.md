@@ -27,8 +27,8 @@ every game builds against the one library, so a fix reaches all of them.
 void setup() {
   RPULink_BeginUart();                  // RPU Rev 4 / 102: ESP32 in the WiFi socket (Serial2)
   // RPULink_BeginSpi(53);              // future PinNode boards that link over SPI
-  PinNodeCtrl_Settings(settingsTable, settingsCount, SettingsApplied);   // optional
-  PinNodeCtrl_Audits(auditTable, auditCount);                            // optional
+  PinNodeCtrl_SettingsP(settingsTable, settingsCount, SettingsApplied);  // optional; tables in PROGMEM
+  PinNodeCtrl_AuditsP(auditTable, auditCount);                           // optional
   PinNodeCtrl_Begin("1.0.0", "my-ruleset", manifestHash, 4, 0, RPU_OS_HARDWARE_REV);
 }
 

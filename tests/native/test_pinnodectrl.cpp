@@ -23,6 +23,8 @@ boolean RPULink_QueueText(byte type, const char *t) { return RPULink_Queue(type,
 boolean RPULink_IsUp() { return linkUp; }
 boolean RPULink_IsDormant() { return linkDormant; }
 boolean RPULink_Pending() { return false; }
+static unsigned int fakeQueueFree = 256;
+unsigned int RPULink_QueueFree() { return fakeQueueFree; }
 unsigned int RPULink_BadFrames() { return 3; }
 unsigned int RPULink_DataOverruns() { return 2; }
 unsigned int RPULink_FramingErrors() { return 0; }
@@ -68,8 +70,8 @@ int main() {
 
   // HELLO carries hwRev; the reports follow it
   static const byte mh[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-  PinNodeCtrl_Settings(settings, 3, nullptr);
-  PinNodeCtrl_Audits(audits, 2);
+  PinNodeCtrl_SettingsP(settings, 3, nullptr);                  // the converter's flash tables
+  PinNodeCtrl_AuditsP(audits, 2);
   PinNodeCtrl_Actions(actions, 6);
   PinNodeCtrl_Begin("1.2.3", "rs", mh, 4, 0, 300);
   const Rec *h = last(0x42);
@@ -101,6 +103,13 @@ int main() {
   inject(0xA7, {0, 0, 0, 0, 0});
   inject(0xA1, {5, 0, 1, 0x40, 0x42, 0x0F, 0});
   CHECK(last(0x2C)->d[8] == PINNODE_SETTING_OK && i32(last(0x2C)->d, 1) == 1000000);
+  // a table in RAM (older sketches) reads the same
+  PinNodeCtrl_Settings(settings, 3, nullptr);
+  PinNodeCtrl_Audits(audits, 2);
+  inject(0xA1, {6, 0, 2, 50, 0, 0, 0});
+  CHECK(last(0x2C)->d[8] == PINNODE_SETTING_OK && EEPROM.mem[101] == 50);
+  inject(0xA1, {7, 0, 2, 57, 0, 0, 0});
+  CHECK(last(0x2C)->d[8] == PINNODE_SETTING_OUT_OF_RANGE);
 
   // a game: stats coalesce until BallEnd and go ahead of BALL_END
   PinNodeCtrl_GameStart(1, false);
@@ -325,6 +334,110 @@ int main() {
   PinNodeCtrl_SetHello("other-ruleset", "2.0.0", mh2, 0x12345678UL, 4, 0x01);
   CHECK(count(0x42) == hellos0 + 1);
   CHECK(PinNodeCtrl_GameCounter() > 0);
+
+  // ---- Sidecar: nothing outside a game
+  PinNodeCtrl_Mode(PINNODE_MODE_ATTRACT, 0, 0);
+  {
+    unsigned long sc[1] = {0};
+    PinNodeCtrl_GameEnd(sc, 1, 0, 0);
+  }
+  sent.clear();
+  PinNodeCtrl_Sidecar(1, 0x0101, 7);
+  PinNodeCtrl_SidecarState(1, 1, 50);
+  PinNodeCtrl_SidecarTimer(1, 1, 20000, 20000);
+  tick(10);
+  CHECK(count(0x3D) == 0 && count(0x3E) == 0 && count(0x3F) == 0);
+
+  // an event goes at once; reserved codes and keys are refused
+  PinNodeCtrl_GameStart(1, false);
+  uint16_t g = PinNodeCtrl_GameCounter();
+  sent.clear();
+  PinNodeCtrl_Sidecar(2, 0x0103, -5);
+  CHECK(count(0x3D) == 1 && last(0x3D)->d.size() == 9);
+  CHECK(last(0x3D)->d[0] == (byte)g && last(0x3D)->d[2] == 2 && last(0x3D)->d[3] == 0x03 && last(0x3D)->d[4] == 0x01);
+  CHECK(i32(last(0x3D)->d, 5) == -5);
+  PinNodeCtrl_Sidecar(1, 0xFF00, 1);
+  PinNodeCtrl_SidecarState(1, 240, 1);
+  PinNodeCtrl_SidecarTimer(1, 255, 1000);
+  tick(10);
+  CHECK(count(0x3D) == 1 && count(0x3E) == 0 && count(0x3F) == 0);
+
+  // states: coalesced to the newest, one record per slot, a repeat of the sent value is dropped
+  PinNodeCtrl_SidecarState(1, 1, 10);
+  PinNodeCtrl_SidecarState(1, 1, 20);
+  PinNodeCtrl_SidecarState(1, 2, 3);
+  PinNodeCtrl_SidecarState(2, 1, 99);
+  tick(10);
+  CHECK(count(0x3E) == 2);
+  {
+    const Rec *p1 = nullptr, *p2 = nullptr;
+    for (auto &r : sent) if (r.type == 0x3E) (r.d[2] == 1 ? p1 : p2) = &r;
+    CHECK(p1 && p1->d[3] == 2 && p1->d.size() == 4 + 10 && p1->d[4] == 1 && i32(p1->d, 5) == 20 && p1->d[9] == 2 && i32(p1->d, 10) == 3);
+    CHECK(p2 && p2->d[3] == 1 && i32(p2->d, 5) == 99);
+  }
+  sent.clear();
+  PinNodeCtrl_SidecarState(1, 1, 20);           // unchanged
+  tick(10);
+  CHECK(count(0x3E) == 0);
+  // more than nine changes for a slot: split into records of nine
+  for (byte k = 10; k < 30; k++) PinNodeCtrl_SidecarState(3, k, k);
+  tick(10);
+  CHECK(count(0x3E) == 3 && sent[0].d[3] == 9 && sent[1].d[3] == 9 && sent[2].d[3] == 2);
+
+  // the link queue busy: states wait, events are dropped and counted
+  sent.clear();
+  fakeQueueFree = 100;
+  unsigned int dropped0 = PinNodeCtrl_SidecarDropped();
+  PinNodeCtrl_SidecarState(1, 1, 21);
+  PinNodeCtrl_Sidecar(1, 0x0200, 1);
+  tick(10);
+  CHECK(count(0x3E) == 0 && count(0x3D) == 0 && PinNodeCtrl_SidecarDropped() == dropped0 + 1);
+  PinNodeCtrl_SidecarState(1, 1, 22);           // still waiting: newest value wins
+  fakeQueueFree = 256;
+  tick(10);
+  CHECK(count(0x3E) == 1 && i32(last(0x3E)->d, 5) == 22);
+
+  // timers: left counts down from the call; pause keeps the total; stop goes once, then is forgotten
+  sent.clear();
+  PinNodeCtrl_SidecarTimer(1, 1, 20000, 20000);
+  fake_millis += 1500;
+  PinNodeCtrl_Update(fake_millis, false);
+  CHECK(count(0x3F) == 1 && last(0x3F)->d[4] == PINNODE_SC_TIMER_RUNNING);
+  CHECK(i32(last(0x3F)->d, 5) == 18500 && i32(last(0x3F)->d, 9) == 20000);
+  PinNodeCtrl_SidecarTimerPause(1, 1, 12000);
+  tick(10);
+  CHECK(last(0x3F)->d[4] == PINNODE_SC_TIMER_PAUSED && i32(last(0x3F)->d, 5) == 12000 && i32(last(0x3F)->d, 9) == 20000);
+  PinNodeCtrl_SidecarTimerStop(1, 1);
+  tick(10);
+  CHECK(count(0x3F) == 3 && last(0x3F)->d[4] == PINNODE_SC_TIMER_STOPPED);
+  PinNodeCtrl_SidecarTimerStop(1, 1);           // not running: nothing
+  PinNodeCtrl_SidecarTimer(2, 2, 5000);
+  tick(10);
+  CHECK(count(0x3F) == 4);
+
+  // the link comes back (the node may have restarted): every state and timer goes again, and the hook runs
+  static int resyncs = 0;
+  PinNodeCtrl_SetSidecarResync([]() { resyncs++; });
+  sent.clear();
+  linkUp = false; tick(10);
+  linkUp = true; tick(10);
+  CHECK(count(0x42) == 1 && resyncs == 1);
+  CHECK(count(0x3F) == 1 && last(0x3F)->d[2] == 2);   // the running timer, not the stopped one
+  int states = 0;
+  for (auto &r : sent) if (r.type == 0x3E) states += r.d[3];
+  CHECK(states == 2 + 1 + 20);                  // slots 1 (keys 1, 2), 2 (key 1), 3 (20 keys)
+
+  // a new game starts empty
+  {
+    unsigned long sc[1] = {0};
+    PinNodeCtrl_GameEnd(sc, 1, 0, 0);
+  }
+  PinNodeCtrl_GameStart(1, false);
+  sent.clear();
+  linkUp = false; tick(10);
+  linkUp = true; tick(10);
+  CHECK(count(0x3E) == 0 && count(0x3F) == 0);
+  PinNodeCtrl_SetSidecarResync(NULL);
 
   printf("%d checks, %d failed\n", checks, fails);
   return fails ? 1 : 0;

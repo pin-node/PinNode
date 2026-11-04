@@ -15,6 +15,7 @@ int main() {
   PinNodeActionRequest r;
   RPULink_BeginUart(); RPULink_BeginSpi(53); RPULink_Update(0); RPULink_Poll();
   PinNodeCtrl_Settings(s, 1, NULL); PinNodeCtrl_Audits(a, 1); PinNodeCtrl_Actions(act, 1);
+  PinNodeCtrl_SettingsP(s, 1, NULL); PinNodeCtrl_AuditsP(a, 1);
   PinNodeCtrl_Begin("1", "x", mh, 4, 0, 4); PinNodeCtrl_DebugTo(NULL);
   PinNodeCtrl_Mode(0, 0, 0); PinNodeCtrl_GameStart(1, false); PinNodeCtrl_PlayerAdded(2);
   PinNodeCtrl_BallStart(1, 1); PinNodeCtrl_BallEnd(1, 1, 0); PinNodeCtrl_GameEnd(scores, 1, 0);

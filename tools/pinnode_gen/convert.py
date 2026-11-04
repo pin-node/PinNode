@@ -202,8 +202,8 @@ class Converter:
     def tables(self, main: Source, settings: list[dict], audit_defines: list[str]) -> None:
         fn = _function(main, "setup")
         pos = _line_start(main.text, main.text.rfind("\n", 0, fn[0]) if fn else 0)
-        lines = [f"{MARK}: app-adjustable settings (the same EEPROM bytes as the operator menu)",
-                 "const PinNodeSetting PinNodeSettingsTable[] = {"]
+        lines = [f"{MARK}: app-adjustable settings (the same EEPROM bytes as the operator menu), in flash",
+                 "const PinNodeSetting PinNodeSettingsTable[] PROGMEM = {"]
         for s in settings:
             src = s.get("source", {})
             if src.get("eeprom") is None:
@@ -215,7 +215,8 @@ class Converter:
                          f"  // {s.get('id')}")
         if len(lines) == 2:
             lines.append("  {0, 1, 0, 0, 1, false}   // none found: add yours, matching pinnode.game.json")
-        lines += ["};", f"{MARK}: audits (the RPU OS's standard counters)", "const PinNodeAudit PinNodeAuditsTable[] = {"]
+        lines += ["};", f"{MARK}: audits (the RPU OS's standard counters), in flash",
+                  "const PinNodeAudit PinNodeAuditsTable[] PROGMEM = {"]
         lines += [f"  {{{d}, 4}}," for d in audit_defines] or ["  {0, 4}   // none found"]
         lines += ["};", "static void PinNodeManifestBytes(byte *out) {   // PINNODE_MANIFEST_HASH (16 hex) -> 8 bytes",
                   "  const char *h = PINNODE_MANIFEST_HASH;",
@@ -257,10 +258,10 @@ class Converter:
         body_start, close, _ = fn
         ind = _indent_at(main.text, body_start + 1) or "  "
         lines = ["", f"{MARK}: start the link to the node and say hello",
-                 f"PinNodeCtrl_Settings(PinNodeSettingsTable, sizeof(PinNodeSettingsTable) / sizeof(PinNodeSettingsTable[0]), {applied or 'NULL'});"
-                 if n_settings else "// PinNodeCtrl_Settings(...): no settings found to map",
-                 "PinNodeCtrl_Audits(PinNodeAuditsTable, sizeof(PinNodeAuditsTable) / sizeof(PinNodeAuditsTable[0]));"
-                 if n_audits else "// PinNodeCtrl_Audits(...): no audits found to map",
+                 f"PinNodeCtrl_SettingsP(PinNodeSettingsTable, sizeof(PinNodeSettingsTable) / sizeof(PinNodeSettingsTable[0]), {applied or 'NULL'});"
+                 if n_settings else "// PinNodeCtrl_SettingsP(...): no settings found to map",
+                 "PinNodeCtrl_AuditsP(PinNodeAuditsTable, sizeof(PinNodeAuditsTable) / sizeof(PinNodeAuditsTable[0]));"
+                 if n_audits else "// PinNodeCtrl_AuditsP(...): no audits found to map",
                  "RPULink_BeginUart();   // RPU board: the ESP32 in the WiFi socket, on Serial2. Future SPI boards: RPULink_BeginSpi(53)",
                  "{",
                  "  byte manifestHash[8];",

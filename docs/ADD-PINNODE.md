@@ -298,8 +298,8 @@ and can claim that score in the app later. Without it, those scores stay anonymo
 
 | Feature | Calls | Why |
 |---|---|---|
-| Settings | `PinNodeCtrl_Settings` | Change settings from the phone. Marking difficulty settings keeps leaderboards fair, and they lock during tournaments. |
-| Audits | `PinNodeCtrl_Audits` | Plays, replays and coins in the app, without opening the coin door |
+| Settings | `PinNodeCtrl_SettingsP` | Change settings from the phone. Marking difficulty settings keeps leaderboards fair, and they lock during tournaments. |
+| Audits | `PinNodeCtrl_AuditsP` | Plays, replays and coins in the app, without opening the coin door |
 | Credits from the app | `PinNodeCtrl_TakeCreditAdd` | The owner adds credits remotely, through your own credit code |
 | Tests and one-shots | `PinNodeCtrl_Actions` | Lamp, coil and switch tests, clearing audits, presets: from the phone |
 | Original game | `PinNode_BootOptions` | The owner switches between your game and the machine's original ROM |
