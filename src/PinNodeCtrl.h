@@ -198,6 +198,11 @@ long PinNodeCtrl_ClearAudits();       // send them, then zero every registered a
 // for each slot nobody checked in to. Show it in that slot's score window during attract,
 // alternating with the score, until the window ends or the next game starts.
 boolean PinNodeCtrl_ClaimCode(byte slot, unsigned long *code);   // slot 1-4; false if none
+
+// Check-in initials (CHECKIN 0xA4, SPEC-player-checkin §3.2): the initials from a checked-in player's
+// PinNode profile, for pre-filling the high-score entry. True for a slot a player is checked in to in
+// this game (or the last one, until the next GameStart); out gets 3 characters, upper case, no NUL.
+boolean PinNodeCtrl_PlayerInitials(byte slot, char out[3]);   // slot 1-4
 // The code up now is a pairing code (the owner pairing a computer at the machine):
 // PinNode_ShowClaimCodes then takes over every player display with it (PinNode_ShowPairingCode)
 boolean PinNodeCtrl_ClaimIsPairing();

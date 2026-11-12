@@ -549,6 +549,34 @@ static void ClaimDisplay(const byte *d, byte len) {
 
 boolean PinNodeCtrl_ClaimIsPairing() { return claimIsPairing; }
 
+// ------------------------------------------------------------------ check-in initials
+
+static char checkinIni[4][3];               // per slot (1-based slot = index + 1); kept until the next game
+static boolean checkinHave[4];
+
+// CHECKIN (0xA4): slot u8 (0 = queued for the next slot), initials[3], flags u8 (bit0 bound, bit1 unbound)
+static void Checkin(const byte *d) {
+  byte slot = d[0];
+  if (slot < 1 || slot > 4) return;           // queued: it comes again with its slot once it binds
+  if (d[4] & 0x02) { checkinHave[slot - 1] = false; return; }
+  if (!(d[4] & 0x01)) return;
+  boolean any = false;
+  for (byte i = 0; i < 3; i++) {
+    char c = (char)d[1 + i];
+    if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+    if (c < ' ' || c > '~') c = ' ';
+    checkinIni[slot - 1][i] = c;
+    if (c != ' ') any = true;
+  }
+  checkinHave[slot - 1] = any;
+}
+
+boolean PinNodeCtrl_PlayerInitials(byte slot, char out[3]) {
+  if (slot < 1 || slot > 4 || !checkinHave[slot - 1]) return false;
+  memcpy(out, checkinIni[slot - 1], 3);
+  return true;
+}
+
 boolean PinNodeCtrl_ClaimCode(byte slot, unsigned long *code) {
   if (slot < 1 || slot > 4 || !claimCode[slot - 1]) return false;
   if ((long)(millis() - claimUntilMs) >= 0) {   // the claim window is over
@@ -680,6 +708,7 @@ static void HandleRecord(byte type, const byte *data, byte len) {
                      ((unsigned long)data[2] << 16) | ((unsigned long)data[3] << 24);
     millisAtSync = millis();
   } else if (type >= RPULINK_PINNODE_FIRST_S2M && type <= RPULINK_PINNODE_LAST_S2M) {
+    if (type == 0xA4 && len >= 5) Checkin(data);   // and still to the game's hook (greetings)
     if (PinNodeCtrl_OnPinNodeRecord) PinNodeCtrl_OnPinNodeRecord(type, data, len);
   }
 }
@@ -808,6 +837,7 @@ void PinNodeCtrl_GameStart(byte credits, boolean freePlay) {
   openSlot = openBall = 0;                     // no ball yet (live scores wait for BallStart)
   for (byte i = 0; i < PINNODE_STAT_SLOTS; i++) pendStat[i].used = 0;
   for (byte i = 0; i < 4; i++) claimCode[i] = 0;   // a new game ends the last one's claim window
+  for (byte i = 0; i < 4; i++) checkinHave[i] = false;   // and the last one's checked-in players
   SidecarClear();                              // the node clears its own at GAME_START too
   gameStartMs = millis();
   byte d[4];

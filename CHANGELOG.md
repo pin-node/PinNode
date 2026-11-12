@@ -1,5 +1,12 @@
 # Changes
 
+## 0.3.22
+
+- `PinNodeCtrl_PlayerInitials(slot, out)`: the initials on a checked-in player's PinNode profile, from
+  the node's CHECKIN (0xA4), for pre-filling the high-score entry. They're kept per slot until the next
+  `GameStart`, so they're still there for the entry after a game. A profile without initials (all spaces)
+  or an unbound slot gives false. CHECKIN still reaches `PinNodeCtrl_OnPinNodeRecord` as before.
+
 ## 0.3.21
 
 Less RAM on the Mega: about 720 bytes for a converted game (FP25: 84% to 76%).

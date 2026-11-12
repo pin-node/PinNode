@@ -199,6 +199,19 @@ int main() {
   CHECK(!PinNodeCtrl_ClaimCode(2, &code));
   fake_millis += 61000;
   CHECK(!PinNodeCtrl_ClaimCode(1, &code));
+  // check-in initials: kept per slot after the game (for the high-score entry), cleared by the next game
+  char ini[3];
+  inject(0xA4, {0, 'J', 'T', 'X', 0x00});                       // queued: no slot yet
+  CHECK(!PinNodeCtrl_PlayerInitials(1, ini));
+  inject(0xA4, {2, 'j', 't', ' ', 0x01});                       // bound to slot 2
+  CHECK(PinNodeCtrl_PlayerInitials(2, ini) && ini[0] == 'J' && ini[1] == 'T' && ini[2] == ' ');
+  CHECK(!PinNodeCtrl_PlayerInitials(1, ini) && !PinNodeCtrl_PlayerInitials(5, ini));
+  inject(0xA4, {3, ' ', ' ', ' ', 0x01});                       // no initials on the profile
+  CHECK(!PinNodeCtrl_PlayerInitials(3, ini));
+  inject(0xA4, {2, 'J', 'T', ' ', 0x02});                       // unbound
+  CHECK(!PinNodeCtrl_PlayerInitials(2, ini));
+  inject(0xA4, {4, 'A', 'B', 'C', 0x01});
+  CHECK(PinNodeCtrl_PlayerInitials(4, ini));
   // the post-game audit snapshot waits 15 s (it's past that now)
   int audits0 = count(0x2D);
   tick(1);
@@ -349,7 +362,9 @@ int main() {
   CHECK(count(0x3D) == 0 && count(0x3E) == 0 && count(0x3F) == 0);
 
   // an event goes at once; reserved codes and keys are refused
+  CHECK(PinNodeCtrl_PlayerInitials(4, ini));                    // still there from the check-in above
   PinNodeCtrl_GameStart(1, false);
+  CHECK(!PinNodeCtrl_PlayerInitials(4, ini));                   // a new game clears it
   uint16_t g = PinNodeCtrl_GameCounter();
   sent.clear();
   PinNodeCtrl_Sidecar(2, 0x0103, -5);

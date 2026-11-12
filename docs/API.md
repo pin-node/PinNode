@@ -335,6 +335,12 @@ At game start. Clears the codes and their lamps.
 ### `boolean PinNodeCtrl_ClaimCode(byte slot, unsigned long *code)`
 Only if you draw codes yourself. Returns `true` and the code for that player (`slot` 1–4).
 
+### `boolean PinNodeCtrl_PlayerInitials(byte slot, char out[3])`
+For your high-score entry. Returns `true` and the initials on that player's PinNode profile
+(`slot` 1–4; 3 upper-case characters, no NUL) if a player checked in to that slot. They stay until
+the next `PinNodeCtrl_GameStart`, so they're there after the game. Skip the entry for that player
+and use these.
+
 ---
 
 ## 8. Settings in the app
